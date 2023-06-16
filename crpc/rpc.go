@@ -2,6 +2,7 @@ package crpc
 
 import (
 	"fmt"
+	"github/CeerDecy/RpcFrameWork/crpc/common"
 	"log"
 	"net/http"
 )
@@ -15,6 +16,7 @@ type routerGroup struct {
 	groupName     string                           // 组名
 	HandleFuncMap map[string]map[string]HandleFunc // 组中对应的路由方法
 	//HandleMethodMap map[string][]string              // 路由方法的路由
+	treeNode treeNode // 路径前缀树
 }
 
 // Add 为当前组别添加路由方法
@@ -30,6 +32,7 @@ func (group *routerGroup) handle(route, method string, handleFunc HandleFunc) {
 		panic("this crpc has exist")
 	}
 	group.HandleFuncMap[route][method] = handleFunc
+	group.treeNode.Put(route)
 }
 
 // Any 为当前组别添加路由方法
@@ -68,6 +71,7 @@ func (r *router) CreateGroup(groupName string) *routerGroup {
 		groupName:     groupName,
 		HandleFuncMap: make(map[string]map[string]HandleFunc),
 		//HandleMethodMap: make(map[string][]string),
+		treeNode: treeNode{name: groupName},
 	}
 	r.RouterGroups = append(r.RouterGroups, group)
 	return group
@@ -89,24 +93,23 @@ func (e *Engine) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	method := request.Method
 	// 遍历Group
 	for _, group := range e.RouterGroups {
-		// 遍历路由表
-		for route, methodHandle := range group.HandleFuncMap {
-			if request.RequestURI == "/"+group.groupName+route {
-				// 若请求方式为Any，则直接运行Any中的方法
-				if handleFunc, ok := methodHandle[MethodAny]; ok {
-					handleFunc(&Context{writer, request})
-					return
-				}
-				// 若请求方式为method，那么执行method中的方法
-				if handleFunc, ok := methodHandle[method]; ok {
-					handleFunc(&Context{writer, request})
-					return
-				}
-				// 执行到这说明当前路由请求的方法不被服务器所支持
-				writer.WriteHeader(http.StatusMethodNotAllowed)
-				_, _ = fmt.Fprintf(writer, "%s is not allowed", request.RequestURI)
+		routeName := common.SubStringLast(request.RequestURI, "/"+group.groupName)
+		node := group.treeNode.Get(routeName)
+		if node != nil {
+			// 若请求方式为Any，则直接运行Any中的方法
+			if handleFunc, ok := group.HandleFuncMap[node.routePath][MethodAny]; ok {
+				handleFunc(&Context{writer, request})
 				return
 			}
+			// 若请求方式为method，那么执行method中的方法
+			if handleFunc, ok := group.HandleFuncMap[node.routePath][method]; ok {
+				handleFunc(&Context{writer, request})
+				return
+			}
+			// 执行到这说明当前路由请求的方法不被服务器所支持
+			writer.WriteHeader(http.StatusMethodNotAllowed)
+			_, _ = fmt.Fprintf(writer, "%s is not allowed", request.RequestURI)
+			return
 		}
 	}
 	// 遍历完成说
