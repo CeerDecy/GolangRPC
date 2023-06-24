@@ -13,41 +13,42 @@ const MethodAny = "MethodAny"
 type HandleFunc func(ctx *Context)
 
 // MiddleWareFunc 中间件执行函数
-type MiddleWareFunc func(handleFunc HandleFunc) HandleFunc
+type MiddleWareFunc func(next HandleFunc) HandleFunc
 
 // 路由组
 type routerGroup struct {
-	groupName       string                           // 组名
-	HandleFuncMap   map[string]map[string]HandleFunc // 组中对应的路由方法
-	treeNode        treeNode                         // 路径前缀树
-	preMiddleWares  []MiddleWareFunc                 // 前置中间件
-	postMiddleWares []MiddleWareFunc                 // 后置中间件
+	groupName     string                           // 组名
+	HandleFuncMap map[string]map[string]HandleFunc // 组中对应的路由方法
+	treeNode      treeNode                         // 路径前缀树
+	middleWares   []MiddleWareFunc                 // 中间件
+	//postMiddleWares []MiddleWareFunc                 // 后置中间件
 }
 
-// PreMiddleWare 添加前置中间件
-func (group *routerGroup) PreMiddleWare(wareFunc ...MiddleWareFunc) {
-	group.preMiddleWares = append(group.preMiddleWares, wareFunc...)
+// UseMiddleWare 添加前置中间件
+func (group *routerGroup) UseMiddleWare(wareFunc ...MiddleWareFunc) {
+	group.middleWares = append(group.middleWares, wareFunc...)
 }
 
-// PostMiddleWare 添加后置中间件
-func (group *routerGroup) PostMiddleWare(wareFunc ...MiddleWareFunc) {
-	group.postMiddleWares = append(group.postMiddleWares, wareFunc...)
-}
+//// PostMiddleWare 添加后置中间件
+//func (group *routerGroup) PostMiddleWare(wareFunc ...MiddleWareFunc) {
+//	group.postMiddleWares = append(group.postMiddleWares, wareFunc...)
+//}
 
 func (group *routerGroup) methodHandle(handleFunc HandleFunc, ctx *Context) {
 	// 前置中间件
-	if group.preMiddleWares != nil {
-		for _, middleWareFunc := range group.preMiddleWares {
+	if group.middleWares != nil {
+		for _, middleWareFunc := range group.middleWares {
 			handleFunc = middleWareFunc(handleFunc)
 		}
 	}
 	handleFunc(ctx)
 	// 后置中间件
-	if group.postMiddleWares != nil {
-		for _, middleWareFunc := range group.postMiddleWares {
-			handleFunc = middleWareFunc(handleFunc)
-		}
-	}
+	//if group.postMiddleWares != nil {
+	//	for _, middleWareFunc := range group.postMiddleWares {
+	//		handleFunc = middleWareFunc(handleFunc)
+	//	}
+	//}
+	//handleFunc(ctx)
 }
 
 func (group *routerGroup) handle(route, method string, handleFunc HandleFunc) {
