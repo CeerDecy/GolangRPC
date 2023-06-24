@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
+	"net/http"
 )
 
 func Log(next crpc.HandleFunc) crpc.HandleFunc {
@@ -34,5 +35,9 @@ func main() {
 		fmt.Fprintf(ctx.Writer, "%s hello get", "CeerDecy")
 		fmt.Println("handler ... ")
 	}, Log)
+
+	group.Get("/html", func(ctx *crpc.Context) {
+		ctx.HTML(http.StatusOK, "<h1>This is a html page</h1>")
+	})
 	engine.Run(":8000")
 }
