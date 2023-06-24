@@ -1,6 +1,8 @@
 package crpc
 
-import "strings"
+import (
+	"strings"
+)
 
 type treeNode struct {
 	name      string
@@ -37,7 +39,7 @@ func (t *treeNode) Put(path string) {
 	path = strings.Trim(path, "/")
 	splits := strings.Split(path, "/")
 	// 若i == 0第一个字符可能是空格，因此需要忽略
-	if len(splits) > 1 {
+	if len(splits) >= 1 {
 		putDfs(splits, "", 0, t)
 	}
 }
@@ -47,6 +49,9 @@ func getDfs(splits []string, index int, root *treeNode) (*treeNode, bool) {
 	if index >= len(splits) {
 		return nil, false
 	}
+	if root.name == splits[index] {
+		return root, true
+	}
 	for _, node := range root.child {
 		if node.name == "**" {
 			return node, true
@@ -54,7 +59,7 @@ func getDfs(splits []string, index int, root *treeNode) (*treeNode, bool) {
 		if node.name == splits[index] ||
 			node.name == "*" ||
 			strings.Contains(node.name, ":") {
-			if index == len(splits)-1 {
+			if index+1 == len(splits) {
 				return node, true
 			}
 			return getDfs(splits, index+1, node)
