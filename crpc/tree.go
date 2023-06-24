@@ -5,7 +5,8 @@ import "strings"
 type treeNode struct {
 	name      string
 	child     []*treeNode
-	routePath string
+	routePath string // 完整路径
+	isEnd     bool   // 是否为伪节点
 }
 
 // 以递归的方式添加path
@@ -24,6 +25,9 @@ func putDfs(splits []string, route string, index int, root *treeNode) {
 	addNode := &treeNode{name: splits[index]}
 	route += "/" + splits[index]
 	addNode.routePath = route
+	if index == len(splits)-1 {
+		addNode.isEnd = true
+	}
 	putDfs(splits, route, index+1, addNode)
 	root.child = append(root.child, addNode)
 }
