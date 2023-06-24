@@ -5,6 +5,14 @@ import (
 	"github/CeerDecy/RpcFrameWork/crpc"
 )
 
+func Log(next crpc.HandleFunc) crpc.HandleFunc {
+	return func(ctx *crpc.Context) {
+		fmt.Println("router pre handler -> ", ctx.Request.RequestURI)
+		next(ctx)
+		fmt.Println("router post handler")
+	}
+}
+
 func main() {
 	engine := crpc.MakeEngine()
 	group := engine.CreateGroup("user")
@@ -15,14 +23,6 @@ func main() {
 		return func(ctx *crpc.Context) {
 			fmt.Println("pre handler")
 			next(ctx)
-			fmt.Println("post handler")
-		}
-	})
-	group.UseMiddleWare(func(next crpc.HandleFunc) crpc.HandleFunc {
-		return func(ctx *crpc.Context) {
-			fmt.Println("two pre")
-			next(ctx)
-			fmt.Println("two post")
 		}
 	})
 	//group.PostMiddleWare(func(pre crpc.HandleFunc) crpc.HandleFunc {
@@ -33,6 +33,6 @@ func main() {
 	group.Get("/hello/**", func(ctx *crpc.Context) {
 		fmt.Fprintf(ctx.Writer, "%s hello get", "CeerDecy")
 		fmt.Println("handler ... ")
-	})
+	}, Log)
 	engine.Run(":8000")
 }
