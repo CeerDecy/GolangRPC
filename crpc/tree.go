@@ -49,9 +49,6 @@ func getDfs(splits []string, index int, root *treeNode) (*treeNode, bool) {
 	if index >= len(splits) {
 		return nil, false
 	}
-	if root.name == splits[index] {
-		return root, true
-	}
 	for _, node := range root.child {
 		if node.name == "**" {
 			return node, true
