@@ -2,7 +2,9 @@ package crpc
 
 import (
 	"fmt"
+	"github/CeerDecy/RpcFrameWork/crpc/render"
 	"github/CeerDecy/RpcFrameWork/crpc/utils"
+	"html/template"
 	"log"
 	"net/http"
 )
@@ -131,18 +133,36 @@ func (r *router) CreateGroup(groupName string) *routerGroup {
 
 type Engine struct {
 	router
+	funcMap    template.FuncMap
+	HTMLRender *render.HTMLRender
 }
 
 // MakeEngine 初始化引擎
 func MakeEngine() *Engine {
 	return &Engine{
-		router{},
+		router: router{},
 	}
 }
 
+// SetFuncMap 设置FuncMap
+func (e *Engine) SetFuncMap(funcMap template.FuncMap) {
+	e.funcMap = funcMap
+}
+
+// LoadTemplate 根据路径通配符加载模板
+func (e *Engine) LoadTemplate(pattern string) {
+	t := template.Must(template.New("").Funcs(e.funcMap).ParseGlob(pattern))
+	e.SetTemplate(t)
+}
+
+// SetTemplate 用户自定义设置模板
+func (e *Engine) SetTemplate(t *template.Template) {
+	e.HTMLRender = &render.HTMLRender{Template: t}
+}
+
+// 实现Handler接口
 func (e *Engine) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	e.HttpRequestHandle(writer, request)
-
 }
 
 // Run 启动引擎
@@ -164,12 +184,12 @@ func (e *Engine) HttpRequestHandle(writer http.ResponseWriter, request *http.Req
 		if node != nil && node.isEnd {
 			// 若请求方式为Any，则直接运行Any中的方法
 			if handleFunc, ok := group.HandleFuncMap[node.routePath][MethodAny]; ok {
-				group.methodHandle(node.routePath, MethodAny, handleFunc, &Context{writer, request})
+				group.methodHandle(node.routePath, MethodAny, handleFunc, &Context{writer, request, e})
 				return
 			}
 			// 若请求方式为method，那么执行method中的方法
 			if handleFunc, ok := group.HandleFuncMap[node.routePath][method]; ok {
-				group.methodHandle(node.routePath, method, handleFunc, &Context{writer, request})
+				group.methodHandle(node.routePath, method, handleFunc, &Context{writer, request, e})
 				return
 			}
 			// 执行到这说明当前路由请求的方法不被服务器所支持

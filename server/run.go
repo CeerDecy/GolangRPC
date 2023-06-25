@@ -16,7 +16,10 @@ func Log(next crpc.HandleFunc) crpc.HandleFunc {
 }
 
 func main() {
+	// 初始化引擎
 	engine := crpc.MakeEngine()
+	// 加载HTML
+	engine.LoadTemplate("static/html/*.html")
 	group := engine.CreateGroup("user")
 	group.UseMiddleWare(func(next crpc.HandleFunc) crpc.HandleFunc {
 		return func(ctx *crpc.Context) {
@@ -48,5 +51,11 @@ func main() {
 		ctx.HTMLTemplateGlob("login.html", user,
 			"static/html/*.html")
 	})
+	// Register模板
+	group.Get("/html/register", func(ctx *crpc.Context) {
+		user := &models.User{Name: "猛喝威士忌"}
+		ctx.Template("register.html", user)
+	})
+
 	engine.Run(":8000")
 }

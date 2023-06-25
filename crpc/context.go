@@ -9,6 +9,7 @@ import (
 type Context struct {
 	Writer  http.ResponseWriter
 	Request *http.Request
+	engine  *Engine
 }
 
 // HTML 返回HTML文本
@@ -48,6 +49,15 @@ func (c *Context) HTMLTemplateGlob(name string, data any, filepath string) {
 		return
 	}
 	err = temp.Execute(c.Writer, data)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+// Template 加载Template
+func (c *Context) Template(name string, data any) {
+	c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	err := c.engine.HTMLRender.Template.ExecuteTemplate(c.Writer, name, data)
 	if err != nil {
 		log.Println(err)
 	}
