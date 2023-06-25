@@ -1,9 +1,8 @@
 package crpc
 
 import (
-	"encoding/json"
-	"encoding/xml"
 	"fmt"
+	"github/CeerDecy/RpcFrameWork/crpc/render"
 	"github/CeerDecy/RpcFrameWork/crpc/utils"
 	"html/template"
 	"log"
@@ -19,13 +18,7 @@ type Context struct {
 
 // HTML 返回HTML文本
 func (c *Context) HTML(status int, html string) {
-	c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-	c.Writer.WriteHeader(status)
-	_, err := c.Writer.Write([]byte(html))
-	if err != nil {
-		log.Println(err)
-		return
-	}
+	c.Render(status, &render.HTML{Data: html, IsTemp: false})
 }
 
 // HTMLTemplate 返回HTML模板
@@ -61,31 +54,23 @@ func (c *Context) HTMLTemplateGlob(name string, data any, filepath string) {
 
 // Template 加载Template
 func (c *Context) Template(name string, data any) {
-	c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-	err := c.engine.HTMLRender.Template.ExecuteTemplate(c.Writer, name, data)
-	if err != nil {
-		log.Println(err)
-	}
+	c.Render(http.StatusOK, &render.HTML{
+		Name:   name,
+		Data:   data,
+		Temp:   c.engine.HTMLRender.Template,
+		IsTemp: true,
+	})
 }
 
 // JSON 返回JSON数据
-func (c *Context) JSON(state int, data any) error {
-	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	c.Writer.WriteHeader(state)
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	_, err = c.Writer.Write(jsonData)
-	return err
+func (c *Context) JSON(state int, data any) {
+	c.Render(http.StatusOK, &render.Json{Data: data})
 }
 
 // XML 返回XML数据
-func (c *Context) XML(state int, data any) error {
-	c.Writer.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	c.Writer.WriteHeader(state)
-	err := xml.NewEncoder(c.Writer).Encode(data)
-	return err
+func (c *Context) XML(state int, data any) {
+	c.Render(state, &render.XML{Data: data})
+	//log.Println(c.Writer.Header().Get("Content-Type"))
 }
 
 // File 返回文件数据
@@ -111,4 +96,23 @@ func (c *Context) FileFromFS(filepath string, fs http.FileSystem) {
 	}(c.Request.URL.Path)
 	c.Request.URL.Path = filepath
 	http.FileServer(fs).ServeHTTP(c.Writer, c.Request)
+}
+
+// Redirect 重定向
+func (c *Context) Redirect(status int, url string) {
+	c.Render(status, &render.Redirect{Code: status, Req: c.Request, Location: url})
+}
+
+// String 字符串格式化
+func (c *Context) String(status int, format string, values ...any) {
+	c.Render(status, &render.String{Format: format, Data: values})
+}
+
+func (c *Context) Render(status int, render render.Render) {
+	err := render.Render(c.Writer)
+	c.Writer.WriteHeader(status)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 }

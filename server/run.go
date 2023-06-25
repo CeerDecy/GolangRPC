@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
 	"github/CeerDecy/RpcFrameWork/server/models"
-	"log"
 	"net/http"
 )
 
@@ -12,7 +11,8 @@ func Log(next crpc.HandleFunc) crpc.HandleFunc {
 	return func(ctx *crpc.Context) {
 		fmt.Println("router pre handler -> ", ctx.Request.RequestURI)
 		next(ctx)
-		fmt.Println("router post handler")
+		fmt.Println("router post handler -> ", ctx.Request.RequestURI)
+		fmt.Println(ctx.Writer.Header().Get("Content-Type"))
 	}
 }
 
@@ -26,6 +26,7 @@ func main() {
 		return func(ctx *crpc.Context) {
 			fmt.Println("pre handler")
 			next(ctx)
+			fmt.Println("post handler")
 		}
 	})
 	// **通配符
@@ -61,19 +62,13 @@ func main() {
 	// 返回JSON数据
 	group.Get("/json", func(ctx *crpc.Context) {
 		user := &models.User{Name: "猛喝威士忌"}
-		err := ctx.JSON(http.StatusOK, user)
-		if err != nil {
-			log.Println(err)
-		}
+		ctx.JSON(http.StatusOK, user)
 	})
 
 	// 返回xml数据
 	group.Get("/xml", func(ctx *crpc.Context) {
 		user := &models.User{Name: "猛喝威士忌"}
-		err := ctx.XML(http.StatusOK, user)
-		if err != nil {
-			log.Println(err)
-		}
+		ctx.XML(http.StatusOK, user)
 	})
 
 	// 返回jpeg文件
@@ -89,6 +84,17 @@ func main() {
 	// 通过文件系统获取文件
 	group.Get("/filesystem", func(ctx *crpc.Context) {
 		ctx.FileFromFS("image.jpeg", http.Dir("static/img/"))
+	})
+
+	// 重定向
+	group.Get("/redirect", func(ctx *crpc.Context) {
+		// 重定向的状态值为302
+		ctx.Redirect(http.StatusFound, "/user/html/login")
+	})
+
+	// 格式化字符串
+	group.Get("/string", func(ctx *crpc.Context) {
+		ctx.String(http.StatusOK, "%s %s", "CeerDecy", "猛喝威士忌")
 	})
 
 	engine.Run(":8000")
