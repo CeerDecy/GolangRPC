@@ -64,7 +64,7 @@ func (c *Context) Template(name string, data any) {
 
 // JSON 返回JSON数据
 func (c *Context) JSON(state int, data any) {
-	c.Render(http.StatusOK, &render.Json{Data: data})
+	c.Render(state, &render.Json{Data: data})
 }
 
 // XML 返回XML数据
