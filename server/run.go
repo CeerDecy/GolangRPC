@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
 	"github/CeerDecy/RpcFrameWork/server/models"
+	"log"
 	"net/http"
 )
 
@@ -55,6 +56,39 @@ func main() {
 	group.Get("/html/register", func(ctx *crpc.Context) {
 		user := &models.User{Name: "猛喝威士忌"}
 		ctx.Template("register.html", user)
+	})
+
+	// 返回JSON数据
+	group.Get("/json", func(ctx *crpc.Context) {
+		user := &models.User{Name: "猛喝威士忌"}
+		err := ctx.JSON(http.StatusOK, user)
+		if err != nil {
+			log.Println(err)
+		}
+	})
+
+	// 返回xml数据
+	group.Get("/xml", func(ctx *crpc.Context) {
+		user := &models.User{Name: "猛喝威士忌"}
+		err := ctx.XML(http.StatusOK, user)
+		if err != nil {
+			log.Println(err)
+		}
+	})
+
+	// 返回jpeg文件
+	group.Get("/image", func(ctx *crpc.Context) {
+		ctx.File("static/img/image.jpeg")
+	})
+
+	// 返回jpeg文件
+	group.Get("/imageByName", func(ctx *crpc.Context) {
+		ctx.FileAttachment("static/img/image.jpeg", "car.jpeg")
+	})
+
+	// 通过文件系统获取文件
+	group.Get("/filesystem", func(ctx *crpc.Context) {
+		ctx.FileFromFS("image.jpeg", http.Dir("static/img/"))
 	})
 
 	engine.Run(":8000")

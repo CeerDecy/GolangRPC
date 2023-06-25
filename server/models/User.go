@@ -1,5 +1,5 @@
 package models
 
 type User struct {
-	Name string
+	Name string `json:"name" xml:"name"`
 }
