@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"sync"
 )
 
 const MethodAny = "MethodAny"
@@ -135,12 +136,24 @@ type Engine struct {
 	router
 	funcMap    template.FuncMap
 	HTMLRender *render.HTMLRender
+	Pool       sync.Pool
 }
 
 // MakeEngine 初始化引擎
 func MakeEngine() *Engine {
-	return &Engine{
+	e := &Engine{
 		router: router{},
+	}
+	e.Pool.New = func() any {
+		return e.allocateContext()
+	}
+	return e
+}
+
+// 给Context分配内存
+func (e *Engine) allocateContext() any {
+	return &Context{
+		engine: e,
 	}
 }
 
@@ -162,7 +175,11 @@ func (e *Engine) SetTemplate(t *template.Template) {
 
 // 实现Handler接口
 func (e *Engine) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	e.HttpRequestHandle(writer, request)
+	ctx := e.Pool.Get().(*Context)
+	ctx.Writer = writer
+	ctx.Request = request
+	e.HttpRequestHandle(ctx, writer, request)
+	e.Pool.Put(ctx)
 }
 
 // Run 启动引擎
@@ -174,7 +191,7 @@ func (e *Engine) Run(address string) {
 	}
 }
 
-func (e *Engine) HttpRequestHandle(writer http.ResponseWriter, request *http.Request) {
+func (e *Engine) HttpRequestHandle(ctx *Context, writer http.ResponseWriter, request *http.Request) {
 	// 获取当前请求的方法
 	method := request.Method
 	// 遍历Group
@@ -184,12 +201,12 @@ func (e *Engine) HttpRequestHandle(writer http.ResponseWriter, request *http.Req
 		if node != nil && node.isEnd {
 			// 若请求方式为Any，则直接运行Any中的方法
 			if handleFunc, ok := group.HandleFuncMap[node.routePath][MethodAny]; ok {
-				group.methodHandle(node.routePath, MethodAny, handleFunc, &Context{writer, request, e})
+				group.methodHandle(node.routePath, MethodAny, handleFunc, ctx)
 				return
 			}
 			// 若请求方式为method，那么执行method中的方法
 			if handleFunc, ok := group.HandleFuncMap[node.routePath][method]; ok {
-				group.methodHandle(node.routePath, method, handleFunc, &Context{writer, request, e})
+				group.methodHandle(node.routePath, method, handleFunc, ctx)
 				return
 			}
 			// 执行到这说明当前路由请求的方法不被服务器所支持
