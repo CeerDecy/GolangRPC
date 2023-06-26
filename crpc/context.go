@@ -11,9 +11,41 @@ import (
 )
 
 type Context struct {
-	Writer  http.ResponseWriter
-	Request *http.Request
-	engine  *Engine
+	Writer     http.ResponseWriter
+	Request    *http.Request
+	engine     *Engine
+	queryCache url.Values
+}
+
+// 初始化参数缓存
+func (c *Context) initQueryCache() {
+	if c.Request != nil {
+		c.queryCache = c.Request.URL.Query()
+	} else {
+		c.queryCache = url.Values{}
+	}
+}
+
+// GetQuery 获取参数
+func (c *Context) GetQuery(key string) string {
+	c.initQueryCache()
+	return c.queryCache.Get(key)
+}
+
+// GetQueryArray 获取参数
+func (c *Context) GetQueryArray(key string) ([]string, bool) {
+	c.initQueryCache()
+	val, ok := c.queryCache[key]
+	return val, ok
+}
+
+// GetDefaultQuery 获取参数
+func (c *Context) GetDefaultQuery(key, def string) string {
+	val, ok := c.GetQueryArray(key)
+	if !ok {
+		return def
+	}
+	return val[0]
 }
 
 // HTML 返回HTML文本

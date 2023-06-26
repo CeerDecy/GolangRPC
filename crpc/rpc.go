@@ -196,7 +196,7 @@ func (e *Engine) HttpRequestHandle(ctx *Context, writer http.ResponseWriter, req
 	method := request.Method
 	// 遍历Group
 	for _, group := range e.RouterGroups {
-		routeName := utils.SubStringLast(request.RequestURI, "/"+group.groupName)
+		routeName := utils.SubStringLast(request.URL.Path, "/"+group.groupName)
 		node := group.treeNode.Get(routeName)
 		if node != nil && node.isEnd {
 			// 若请求方式为Any，则直接运行Any中的方法

@@ -97,5 +97,10 @@ func main() {
 		ctx.String(http.StatusOK, "%s %s", "CeerDecy", "猛喝威士忌")
 	})
 
+	// 获取参数
+	group.Get("/add", func(ctx *crpc.Context) {
+		ctx.String(http.StatusOK, ctx.GetDefaultQuery("a", "zzz"))
+	})
+
 	engine.Run(":8000")
 }
