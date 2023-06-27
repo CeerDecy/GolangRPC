@@ -127,9 +127,7 @@ func main() {
 	// Json RequestBody参数
 	group.Get("/jsonParam", func(ctx *crpc.Context) {
 		user := &models.User{}
-		ctx.DisallowUnknownFields()
-		ctx.IsValidate()
-		err := ctx.DealJson(&user)
+		err := ctx.BindJson(&user)
 		if err != nil {
 			log.Println(err)
 			ctx.JSON(http.StatusOK, map[string]any{

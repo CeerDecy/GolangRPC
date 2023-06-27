@@ -1,8 +1,8 @@
-package crpc
+package binding
 
 import (
 	"github.com/go-playground/validator/v10"
-	crpc_error "github/CeerDecy/RpcFrameWork/crpc/error"
+	crpcError "github/CeerDecy/RpcFrameWork/crpc/error"
 	"reflect"
 	"sync"
 )
@@ -28,7 +28,7 @@ func (d *defaultValidator) ValidateStruct(model any) error {
 		return d.validateStruct(model)
 	case reflect.Slice, reflect.Array:
 		count := of.Len()
-		sliceValidateError := make(crpc_error.SliceValidateError, 0)
+		sliceValidateError := make(crpcError.SliceValidateError, 0)
 		for i := 0; i < count; i++ {
 			if err := d.validateStruct(of.Index(i).Interface()); err != nil {
 				sliceValidateError = append(sliceValidateError, err)
