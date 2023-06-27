@@ -1,20 +1,108 @@
 package crpc
 
 import (
+	"errors"
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc/render"
 	"github/CeerDecy/RpcFrameWork/crpc/utils"
 	"html/template"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 )
+
+const defaultMaxMemory = 32 << 20 // 32 MB
 
 type Context struct {
 	Writer     http.ResponseWriter
 	Request    *http.Request
 	engine     *Engine
 	queryCache url.Values
+	formCache  url.Values
+}
+
+// FormFile 获取表单中的文件
+func (c *Context) FormFile(name string) *multipart.FileHeader {
+	file, header, err := c.Request.FormFile(name)
+	if err != nil {
+		log.Println(err)
+	}
+	defer file.Close()
+	return header
+}
+
+// FormFiles 获取表单中的多个文件
+func (c *Context) FormFiles(name string) []*multipart.FileHeader {
+	multipartForm, err := c.MultipartForm()
+	if err != nil {
+		log.Println(err)
+	}
+	return multipartForm.File[name]
+}
+
+// SaveUploadFile 保存上传的文件
+func (c *Context) SaveUploadFile(file *multipart.FileHeader, dst string) error {
+	open, err := file.Open()
+	if err != nil {
+		return err
+	}
+	d, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(d, open)
+	return err
+}
+
+func (c *Context) MultipartForm() (*multipart.Form, error) {
+	err := c.Request.ParseMultipartForm(defaultMaxMemory)
+	return c.Request.MultipartForm, err
+}
+
+// 初始化Post表单参数
+func (c *Context) initPostFormCache() {
+	if c.Request != nil {
+		if err := c.Request.ParseMultipartForm(defaultMaxMemory); err != nil {
+			if !errors.Is(err, http.ErrNotMultipart) {
+				log.Println(err)
+			}
+		}
+
+		c.formCache = c.Request.PostForm
+	} else {
+		c.formCache = url.Values{}
+	}
+}
+
+// GetPostFormArray 获取参数
+func (c *Context) GetPostFormArray(key string) ([]string, bool) {
+	c.initPostFormCache()
+	val, ok := c.formCache[key]
+	return val, ok
+}
+
+// GetPostFormMap 获取参数
+func (c *Context) GetPostFormMap(key string) (map[string]string, bool) {
+	c.initPostFormCache()
+	return c.get(c.formCache, key)
+}
+
+func (c *Context) PostFormArray(key string) []string {
+	values, _ := c.GetPostFormArray(key)
+	return values
+}
+
+// GetPostForm 获取Map中的value
+func (c *Context) GetPostForm(key string) (string, bool) {
+	values, ok := c.GetPostFormArray(key)
+	if ok {
+		return values[0], ok
+	}
+	return "", false
 }
 
 // 初始化参数缓存
@@ -46,6 +134,34 @@ func (c *Context) GetDefaultQuery(key, def string) string {
 		return def
 	}
 	return val[0]
+}
+
+// GetQueryMap 获取请求中Map参数
+// http://172.0.0.1:8000/user/queryMap?user[name]=ABC&user[age]=18
+func (c *Context) GetQueryMap(key string) (map[string]string, bool) {
+	c.initQueryCache()
+	return c.get(c.queryCache, key)
+}
+
+// QueryMap 获取请求中的参数Map
+func (c *Context) QueryMap(key string) map[string]string {
+	dict, _ := c.GetQueryMap(key)
+	return dict
+}
+
+// 获取指定Map中的所有键值对
+func (c *Context) get(cache map[string][]string, key string) (map[string]string, bool) {
+	dict := make(map[string]string)
+	exist := false
+	for k, v := range cache {
+		left := strings.IndexByte(k, '[')
+		right := strings.IndexByte(k, ']')
+		if left >= 1 && right >= 1 && k[:left] == key {
+			exist = true
+			dict[k[left+1:right]] = v[0]
+		}
+	}
+	return dict, exist
 }
 
 // HTML 返回HTML文本
@@ -142,7 +258,9 @@ func (c *Context) String(status int, format string, values ...any) {
 
 func (c *Context) Render(status int, render render.Render) {
 	err := render.Render(c.Writer)
-	c.Writer.WriteHeader(status)
+	if status != http.StatusOK {
+		c.Writer.WriteHeader(status)
+	}
 	if err != nil {
 		log.Println(err)
 		return

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
 	"github/CeerDecy/RpcFrameWork/server/models"
+	"log"
 	"net/http"
 )
 
@@ -102,5 +103,25 @@ func main() {
 		ctx.String(http.StatusOK, ctx.GetDefaultQuery("a", "zzz"))
 	})
 
+	// 获取参数Map
+	group.Get("/queryMap", func(ctx *crpc.Context) {
+		queryMap, _ := ctx.GetQueryMap("user")
+		ctx.JSON(http.StatusOK, queryMap)
+	})
+
+	// Post表单
+	group.Get("/postForm", func(ctx *crpc.Context) {
+		res, _ := ctx.GetPostFormMap("userInfo")
+		ctx.JSON(http.StatusOK, res)
+	})
+
+	// 文件上传
+	group.Get("/fileUpload", func(ctx *crpc.Context) {
+		file := ctx.FormFile("file")
+		err := ctx.SaveUploadFile(file, "./upload/"+file.Filename)
+		if err != nil {
+			log.Println(err)
+		}
+	})
 	engine.Run(":8000")
 }
