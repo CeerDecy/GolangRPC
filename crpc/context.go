@@ -41,12 +41,14 @@ func (c *Context) BindJson(model any) error {
 	return c.MustBindWith(model, binding.JSON)
 }
 
+// BindXML 以绑定器的形式将XML参数反序列化
+func (c *Context) BindXML(model any) error {
+	return c.MustBindWith(model, binding.XML)
+}
+
 // MustBindWith 必须绑定
 func (c *Context) MustBindWith(model any, bind binding.Binding) error {
 	err := c.ShouldBindWith(model, bind)
-	if err != nil {
-		log.Panicln(err)
-	}
 	return err
 }
 

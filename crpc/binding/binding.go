@@ -8,3 +8,4 @@ type Binding interface {
 }
 
 var JSON Binding = &jsonBinding{}
+var XML Binding = &xmlBinding{}

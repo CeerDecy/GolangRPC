@@ -137,5 +137,19 @@ func main() {
 		}
 		ctx.JSON(http.StatusOK, user)
 	})
+
+	// XML RequestBody参数
+	group.Get("/xmlParam", func(ctx *crpc.Context) {
+		user := &models.User{}
+		err := ctx.BindXML(&user)
+		if err != nil {
+			log.Println(err)
+			ctx.JSON(http.StatusOK, map[string]any{
+				"error": err.Error(),
+			})
+			return
+		}
+		ctx.JSON(http.StatusOK, user)
+	})
 	engine.Run(":8000")
 }

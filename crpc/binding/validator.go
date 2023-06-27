@@ -1,6 +1,9 @@
 package binding
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/go-playground/validator/v10"
 	crpcError "github/CeerDecy/RpcFrameWork/crpc/error"
 	"reflect"
@@ -34,6 +37,9 @@ func (d *defaultValidator) ValidateStruct(model any) error {
 				sliceValidateError = append(sliceValidateError, err)
 			}
 		}
+		if len(sliceValidateError) == 0 {
+			return nil
+		}
 		return sliceValidateError
 	}
 	return nil
@@ -55,4 +61,38 @@ func (d *defaultValidator) lazyInit() {
 	d.once.Do(func() {
 		d.validate = validator.New()
 	})
+}
+
+func validate(model any) error {
+	return Validator.ValidateStruct(model)
+}
+
+// 结构体参数完整性校验
+// 反射
+func validateParam(model any, decoder *json.Decoder) error {
+	m := reflect.ValueOf(model)
+	if m.Kind() != reflect.Pointer {
+		return errors.New("this model is not a pointer")
+	}
+	elem := m.Elem().Interface()
+	of := reflect.ValueOf(elem)
+	switch of.Kind() {
+	case reflect.Struct:
+		return checkParam(of, model, decoder)
+	case reflect.Slice, reflect.Array:
+		ele := of.Type().Elem()
+		fmt.Println(ele.Kind(), reflect.Struct)
+		if ele.Kind() == reflect.Struct {
+			return checkParamSlice(ele, model, decoder)
+		} else if ele.Kind() == reflect.Pointer {
+			fmt.Println(reflect.ValueOf(ele.Elem()), ele.Elem())
+			return checkParam(reflect.ValueOf(ele.Elem()), model, decoder)
+		}
+	default:
+		err := decoder.Decode(model)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

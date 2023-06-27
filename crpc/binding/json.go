@@ -3,7 +3,6 @@ package binding
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -41,40 +40,6 @@ func (j *jsonBinding) Bind(request *http.Request, model any) error {
 	return validate(model)
 }
 
-func validate(model any) error {
-	return Validator.ValidateStruct(model)
-}
-
-// 结构体参数完整性校验
-// 反射
-func validateParam(model any, decoder *json.Decoder) error {
-	m := reflect.ValueOf(model)
-	if m.Kind() != reflect.Pointer {
-		return errors.New("this model is not a pointer")
-	}
-	elem := m.Elem().Interface()
-	of := reflect.ValueOf(elem)
-	switch of.Kind() {
-	case reflect.Struct:
-		return checkParam(of, model, decoder)
-	case reflect.Slice, reflect.Array:
-		ele := of.Type().Elem()
-		fmt.Println(ele.Kind(), reflect.Struct)
-		if ele.Kind() == reflect.Struct {
-			return checkParamSlice(ele, model, decoder)
-		} else if ele.Kind() == reflect.Pointer {
-			fmt.Println(reflect.ValueOf(ele.Elem()), ele.Elem())
-			return checkParam(reflect.ValueOf(ele.Elem()), model, decoder)
-		}
-	default:
-		err := decoder.Decode(model)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // 验证数组、切片
 func checkParamSlice(of reflect.Type, model any, decoder *json.Decoder) error {
 	mv := make([]map[string]interface{}, 0)
@@ -92,7 +57,6 @@ func checkParamSlice(of reflect.Type, model any, decoder *json.Decoder) error {
 				return errors.New("miss field " + jsonTag)
 			}
 		}
-
 	}
 	marshal, err := json.Marshal(mv)
 	if err != nil {
