@@ -23,6 +23,7 @@ func main() {
 	// 加载HTML
 	engine.LoadTemplate("static/html/*.html")
 	group := engine.CreateGroup("user")
+	group.UseMiddleWare(crpc.Logging)
 	group.UseMiddleWare(func(next crpc.HandleFunc) crpc.HandleFunc {
 		return func(ctx *crpc.Context) {
 			fmt.Println("pre handler")
@@ -139,7 +140,7 @@ func main() {
 	})
 
 	// XML RequestBody参数
-	group.Get("/xmlParam", func(ctx *crpc.Context) {
+	group.Any("/xmlParam", func(ctx *crpc.Context) {
 		user := &models.User{}
 		err := ctx.BindXML(&user)
 		if err != nil {

@@ -26,6 +26,7 @@ type Context struct {
 	formCache             url.Values
 	disallowUnknownFields bool // 是否需要开启Json属性不存在校验
 	isValidate            bool // 是否开启结构体校验
+	code                  int
 }
 
 func (c *Context) DisallowUnknownFields() {
@@ -290,6 +291,7 @@ func (c *Context) String(status int, format string, values ...any) {
 
 func (c *Context) Render(status int, render render.Render) {
 	err := render.Render(c.Writer)
+	c.code = status
 	if status != http.StatusOK {
 		c.Writer.WriteHeader(status)
 	}
