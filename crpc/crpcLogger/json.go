@@ -14,6 +14,7 @@ func (j *JsonFormatter) Format(param *LoggerFormatterParam) string {
 	jsonMap := make(map[string]any)
 	jsonMap["log_time"] = time.Now().Format("2006/01/02 - 15:04:05")
 	jsonMap["msg"] = param.Msg
+	jsonMap["level"] = param.Level.Level()
 	jsonMap["TAG"] = param.Tag
 	if param.Fields != nil {
 		jsonMap["data"] = param.Fields

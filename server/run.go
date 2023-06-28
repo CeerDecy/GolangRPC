@@ -20,7 +20,7 @@ func Log(next crpc.HandleFunc) crpc.HandleFunc {
 
 func main() {
 	logger := crpcLogger.TextLogger()
-	logger.WriterInFile("./log/log.log")
+	logger.WriterInFile("./log/")
 	// 初始化引擎
 	engine := crpc.MakeEngine()
 	// 加载HTML
@@ -152,9 +152,7 @@ func main() {
 				"error": err.Error(),
 			}
 			ctx.JSON(http.StatusInternalServerError, dict)
-			jsonLogger := crpcLogger.JsonLogger()
-			jsonLogger.ErrorFields("/xmlParam", "", dict)
-			jsonLogger.Error("/xmlParam", err.Error())
+			logger.Error(ctx.Request.RequestURI, err.Error())
 			return
 		}
 		ctx.JSON(http.StatusOK, user)

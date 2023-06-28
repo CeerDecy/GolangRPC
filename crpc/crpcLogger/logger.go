@@ -5,9 +5,24 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 )
 
 type LogLevel int
+
+// Level 获取等级名称
+func (l *LogLevel) Level() string {
+	switch *l {
+	case LevelDebug:
+		return "DEBUG"
+	case LevelInfo:
+		return "INFO"
+	case LevelError:
+		return "ERROR"
+	default:
+		return ""
+	}
+}
 
 const (
 	LevelDebug LogLevel = iota
@@ -17,18 +32,29 @@ const (
 
 type Logger struct {
 	Level     LogLevel
-	Outs      []io.Writer
+	Writers   []*LoggerWriter
 	Formatter LoggerFormatter
 }
 
+type LoggerWriter struct {
+	Level LogLevel
+	Out   io.Writer
+}
+
 // WriterInFile 设置将文件写入对应文件中
-func (logger *Logger) WriterInFile(filepath string) {
-	logger.AddWriter(FileWriter(filepath))
+func (logger *Logger) WriterInFile(logPath string) {
+	logger.AddWriter(FileWriter(path.Join(logPath, "all.log")), -1)
+	logger.AddWriter(FileWriter(path.Join(logPath, "debug.log")), LevelDebug)
+	logger.AddWriter(FileWriter(path.Join(logPath, "info.log")), LevelInfo)
+	logger.AddWriter(FileWriter(path.Join(logPath, "error.log")), LevelError)
 }
 
 // AddWriter 添加Writer
-func (logger *Logger) AddWriter(writer io.Writer) {
-	logger.Outs = append(logger.Outs, writer)
+func (logger *Logger) AddWriter(writer io.Writer, level LogLevel) {
+	logger.Writers = append(logger.Writers, &LoggerWriter{
+		Level: level,
+		Out:   writer,
+	})
 }
 
 type LoggerFormatter interface {
@@ -46,23 +72,25 @@ type LoggerFormatterParam struct {
 //func Default() *Logger {
 //	logger := NewLogger()
 //	logger.Level = LevelDebug
-//	logger.Outs = append(logger.Outs, os.Stdout)
+//	logger.Writers = append(logger.Writers, os.Stdout)
 //	logger.Formatter = &TextFormatter{}
 //	return logger
 //}
 
 func TextLogger() *Logger {
+	level := LevelDebug
 	logger := NewLogger()
-	logger.Level = LevelDebug
-	logger.Outs = append(logger.Outs, os.Stdout)
+	logger.Level = level
+	logger.Writers = append(logger.Writers, &LoggerWriter{Level: level, Out: os.Stdout})
 	logger.Formatter = &TextFormatter{}
 	return logger
 }
 
 func JsonLogger() *Logger {
 	logger := NewLogger()
-	logger.Level = LevelDebug
-	logger.Outs = append(logger.Outs, os.Stdout)
+	level := LevelDebug
+	logger.Level = level
+	logger.Writers = append(logger.Writers, &LoggerWriter{Level: level, Out: os.Stdout})
 	logger.Formatter = &JsonFormatter{}
 	return logger
 }
@@ -108,13 +136,13 @@ func (logger *Logger) Print(level LogLevel, tag string, msg any, fields map[stri
 	}
 	param.Level = level
 	commonStr := logger.Formatter.Format(param)
-	for _, out := range logger.Outs {
-		if out == os.Stdout {
+	for _, writer := range logger.Writers {
+		if writer.Out == os.Stdout {
 			param.IsColor = true
 			colorStr := logger.Formatter.Format(param)
-			_, _ = fmt.Fprintln(out, colorStr)
-		} else {
-			_, _ = fmt.Fprintln(out, commonStr)
+			_, _ = fmt.Fprintln(writer.Out, colorStr)
+		} else if writer.Level == -1 || level == writer.Level {
+			_, _ = fmt.Fprintln(writer.Out, commonStr)
 		}
 	}
 }
