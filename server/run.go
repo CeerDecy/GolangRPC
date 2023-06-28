@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
+	"github/CeerDecy/RpcFrameWork/crpc/crpcLogger"
 	"github/CeerDecy/RpcFrameWork/server/models"
 	"log"
 	"net/http"
@@ -18,6 +19,7 @@ func Log(next crpc.HandleFunc) crpc.HandleFunc {
 }
 
 func main() {
+	logger := crpcLogger.Default()
 	// 初始化引擎
 	engine := crpc.MakeEngine()
 	// 加载HTML
@@ -26,9 +28,9 @@ func main() {
 	group.UseMiddleWare(crpc.Logging)
 	group.UseMiddleWare(func(next crpc.HandleFunc) crpc.HandleFunc {
 		return func(ctx *crpc.Context) {
-			fmt.Println("pre handler")
+			logger.Debug("MiddleWare", "log pre handler")
 			next(ctx)
-			fmt.Println("post handler")
+			logger.Info("MiddleWare", "log post handler")
 		}
 	})
 	// **通配符
