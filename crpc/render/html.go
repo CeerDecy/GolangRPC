@@ -12,12 +12,13 @@ type HTML struct {
 	IsTemp bool
 }
 
-func (H *HTML) Render(w http.ResponseWriter) error {
-	H.WriteContentType(w)
+func (H *HTML) Render(writer http.ResponseWriter, status int) error {
+	H.WriteContentType(writer)
+	writer.WriteHeader(status)
 	if H.IsTemp {
-		return H.Temp.ExecuteTemplate(w, H.Name, H.Data)
+		return H.Temp.ExecuteTemplate(writer, H.Name, H.Data)
 	}
-	_, err := w.Write([]byte(H.Data.(string)))
+	_, err := writer.Write([]byte(H.Data.(string)))
 	return err
 }
 

@@ -3,7 +3,7 @@ package render
 import "net/http"
 
 type Render interface {
-	Render(w http.ResponseWriter) error
+	Render(writer http.ResponseWriter, status int) error
 	WriteContentType(w http.ResponseWriter)
 }
 

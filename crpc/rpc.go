@@ -2,6 +2,7 @@ package crpc
 
 import (
 	"fmt"
+	"github/CeerDecy/RpcFrameWork/crpc/crpcLogger"
 	"github/CeerDecy/RpcFrameWork/crpc/render"
 	"github/CeerDecy/RpcFrameWork/crpc/utils"
 	"html/template"
@@ -117,6 +118,7 @@ func (group *routerGroup) Head(route string, handleFunc HandleFunc, middleware .
 // 用于存储路由表
 type router struct {
 	RouterGroups []*routerGroup
+	engine       *Engine
 }
 
 // CreateGroup 添加组别
@@ -128,6 +130,7 @@ func (r *router) CreateGroup(groupName string) *routerGroup {
 		//HandleMethodMap: make(map[string][]string),
 		treeNode: treeNode{name: groupName},
 	}
+	group.middleWares = r.engine.middles
 	r.RouterGroups = append(r.RouterGroups, group)
 	return group
 }
@@ -137,6 +140,8 @@ type Engine struct {
 	funcMap    template.FuncMap
 	HTMLRender *render.HTMLRender
 	Pool       sync.Pool
+	Logger     *crpcLogger.Logger
+	middles    []MiddleWareFunc
 }
 
 // MakeEngine 初始化引擎
@@ -148,6 +153,13 @@ func MakeEngine() *Engine {
 		return e.allocateContext()
 	}
 	return e
+}
+
+func DefaultEngine() *Engine {
+	engine := MakeEngine()
+	engine.Logger = crpcLogger.TextLogger()
+	engine.router.engine = engine
+	return engine
 }
 
 // 给Context分配内存
@@ -178,6 +190,7 @@ func (e *Engine) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	ctx := e.Pool.Get().(*Context)
 	ctx.Writer = writer
 	ctx.Request = request
+	ctx.Logger = e.Logger
 	e.HttpRequestHandle(ctx, writer, request)
 	e.Pool.Put(ctx)
 }
@@ -218,4 +231,9 @@ func (e *Engine) HttpRequestHandle(ctx *Context, writer http.ResponseWriter, req
 	// 遍历完成
 	writer.WriteHeader(http.StatusNotFound)
 	_, _ = writer.Write([]byte("404 " + request.RequestURI + " resource not found"))
+}
+
+// UseMiddleWare 配置中间件
+func (e *Engine) UseMiddleWare(middles ...MiddleWareFunc) {
+	e.middles = middles
 }

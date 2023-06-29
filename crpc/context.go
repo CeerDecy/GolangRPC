@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc/binding"
+	"github/CeerDecy/RpcFrameWork/crpc/crpcLogger"
 	"github/CeerDecy/RpcFrameWork/crpc/render"
 	"github/CeerDecy/RpcFrameWork/crpc/utils"
 	"html/template"
@@ -27,6 +28,7 @@ type Context struct {
 	disallowUnknownFields bool // 是否需要开启Json属性不存在校验
 	isValidate            bool // 是否开启结构体校验
 	code                  int
+	Logger                *crpcLogger.Logger
 }
 
 func (c *Context) DisallowUnknownFields() {
@@ -290,13 +292,17 @@ func (c *Context) String(status int, format string, values ...any) {
 }
 
 func (c *Context) Render(status int, render render.Render) {
-	err := render.Render(c.Writer)
+	err := render.Render(c.Writer, status)
 	c.code = status
-	if status != http.StatusOK {
-		c.Writer.WriteHeader(status)
-	}
 	if err != nil {
-		log.Println(err)
+		c.Logger.Error("Render", err.Error())
 		return
 	}
+}
+
+func (c *Context) Fail(code int, msg any) {
+	c.JSON(code, map[string]any{
+		"code": code,
+		"msg":  msg,
+	})
 }

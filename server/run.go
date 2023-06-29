@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
-	"github/CeerDecy/RpcFrameWork/crpc/crpcLogger"
 	"github/CeerDecy/RpcFrameWork/server/models"
 	"log"
 	"net/http"
@@ -19,20 +18,20 @@ func Log(next crpc.HandleFunc) crpc.HandleFunc {
 }
 
 func main() {
-	logger := crpcLogger.TextLogger()
-	logger.WriterInFile("./log/")
-	logger.LogFileSize = 1 << 10
 	// 初始化引擎
-	engine := crpc.MakeEngine()
+	engine := crpc.DefaultEngine()
+	engine.UseMiddleWare(crpc.Logging, crpc.Recovery)
+	logger := engine.Logger
+	logger.WriterInFile("./log/")
+	logger.LogFileSize = 10 << 1000
 	// 加载HTML
 	engine.LoadTemplate("static/html/*.html")
 	group := engine.CreateGroup("user")
-	group.UseMiddleWare(crpc.Logging)
 	group.UseMiddleWare(func(next crpc.HandleFunc) crpc.HandleFunc {
 		return func(ctx *crpc.Context) {
-			logger.Debug("MiddleWare", "log pre handler")
+			logger.Info("MiddleWare", "log pre handler")
 			next(ctx)
-			logger.Info("MiddleWare", "log post handler")
+			logger.Info("MiddleWare", ctx.Writer.Header().Get("Content-Type"))
 		}
 	})
 	// **通配符
@@ -158,5 +157,10 @@ func main() {
 		}
 		ctx.JSON(http.StatusOK, user)
 	})
+
+	group.Get("/recovery", func(ctx *crpc.Context) {
+		panic("this is recovery request")
+	})
+
 	engine.Run(":8000")
 }

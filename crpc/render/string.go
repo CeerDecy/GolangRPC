@@ -10,13 +10,14 @@ type String struct {
 	Data   []any
 }
 
-func (str *String) Render(w http.ResponseWriter) error {
-	str.WriteContentType(w)
+func (str *String) Render(writer http.ResponseWriter, status int) error {
+	str.WriteContentType(writer)
+	writer.WriteHeader(status)
 	if len(str.Data) > 0 {
-		_, err := fmt.Fprintf(w, str.Format, str.Data...)
+		_, err := fmt.Fprintf(writer, str.Format, str.Data...)
 		return err
 	}
-	_, err := w.Write([]byte(str.Format))
+	_, err := writer.Write([]byte(str.Format))
 	return err
 }
 func (str *String) WriteContentType(w http.ResponseWriter) {

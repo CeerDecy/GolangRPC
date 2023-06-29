@@ -9,10 +9,10 @@ type XML struct {
 	Data any
 }
 
-func (X *XML) Render(w http.ResponseWriter) error {
-	X.WriteContentType(w)
-	return xml.NewEncoder(w).Encode(X.Data)
-
+func (X *XML) Render(writer http.ResponseWriter, status int) error {
+	X.WriteContentType(writer)
+	writer.WriteHeader(status)
+	return xml.NewEncoder(writer).Encode(X.Data)
 }
 
 func (X *XML) WriteContentType(w http.ResponseWriter) {

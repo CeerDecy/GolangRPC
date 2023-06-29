@@ -12,11 +12,11 @@ type Redirect struct {
 	Location string
 }
 
-func (r *Redirect) Render(w http.ResponseWriter) error {
+func (r *Redirect) Render(writer http.ResponseWriter, status int) error {
 	if r.Code < http.StatusMultipleChoices || r.Code > http.StatusPermanentRedirect && r.Code != http.StatusCreated {
 		return errors.New(fmt.Sprintf("Cannot redirect with code %d", r.Code))
 	}
-	http.Redirect(w, r.Req, r.Location, r.Code)
+	http.Redirect(writer, r.Req, r.Location, r.Code)
 	return nil
 }
 
