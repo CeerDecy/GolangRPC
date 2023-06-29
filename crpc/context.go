@@ -306,3 +306,11 @@ func (c *Context) Fail(code int, msg any) {
 		"msg":  msg,
 	})
 }
+
+func (c *Context) HandleWithError(err error) {
+	if err != nil {
+		code, data := c.engine.errorHandler(err)
+		c.JSON(code, data)
+		return
+	}
+}

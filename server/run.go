@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
+	crpc_error "github/CeerDecy/RpcFrameWork/crpc/error"
 	"github/CeerDecy/RpcFrameWork/server/models"
 	"log"
 	"net/http"
@@ -21,9 +23,17 @@ func main() {
 	// 初始化引擎
 	engine := crpc.DefaultEngine()
 	engine.UseMiddleWare(crpc.Logging, crpc.Recovery)
+	engine.RegisterErrorHandler(func(err error) (int, any) {
+		data := map[string]any{
+			"code":  -999,
+			"msg":   "err",
+			"error": err.Error(),
+		}
+		return http.StatusInternalServerError, data
+	})
 	logger := engine.Logger
 	logger.WriterInFile("./log/")
-	logger.LogFileSize = 10 << 1000
+	logger.LogFileSize = 1 << 20
 	// 加载HTML
 	engine.LoadTemplate("static/html/*.html")
 	group := engine.CreateGroup("user")
@@ -162,5 +172,26 @@ func main() {
 		panic("this is recovery request")
 	})
 
+	group.Get("/crError", func(ctx *crpc.Context) {
+		crError := crpc_error.Default()
+		crError.Result(func(c *crpc_error.CrError) {
+			logger.Error("CrError", c.Error())
+		})
+		a(1, crError)
+		ctx.JSON(http.StatusOK, nil)
+	})
+
+	group.Get("/httpErr", func(ctx *crpc.Context) {
+		err := errors.New("http error")
+		ctx.HandleWithError(err)
+	})
+
 	engine.Run(":8000")
+}
+
+func a(n int, crErr *crpc_error.CrError) {
+	if n == 1 {
+		err := errors.New("a error")
+		crErr.Put(err)
+	}
 }

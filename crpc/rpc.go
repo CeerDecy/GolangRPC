@@ -135,13 +135,17 @@ func (r *router) CreateGroup(groupName string) *routerGroup {
 	return group
 }
 
+// ErrorHandler HTTP错误处理函数
+type ErrorHandler func(err error) (int, any)
+
 type Engine struct {
 	router
-	funcMap    template.FuncMap
-	HTMLRender *render.HTMLRender
-	Pool       sync.Pool
-	Logger     *crpcLogger.Logger
-	middles    []MiddleWareFunc
+	funcMap      template.FuncMap
+	HTMLRender   *render.HTMLRender
+	Pool         sync.Pool
+	Logger       *crpcLogger.Logger
+	middles      []MiddleWareFunc
+	errorHandler ErrorHandler
 }
 
 // MakeEngine 初始化引擎
@@ -236,4 +240,8 @@ func (e *Engine) HttpRequestHandle(ctx *Context, writer http.ResponseWriter, req
 // UseMiddleWare 配置中间件
 func (e *Engine) UseMiddleWare(middles ...MiddleWareFunc) {
 	e.middles = middles
+}
+
+func (e *Engine) RegisterErrorHandler(handler ErrorHandler) {
+	e.errorHandler = handler
 }
