@@ -2,10 +2,13 @@ package crpcLogger
 
 import (
 	"fmt"
+	"github/CeerDecy/RpcFrameWork/crpc/utils"
 	"io"
 	"log"
 	"os"
 	"path"
+	"strings"
+	"time"
 )
 
 type LogLevel int
@@ -31,9 +34,11 @@ const (
 )
 
 type Logger struct {
-	Level     LogLevel
-	Writers   []*LoggerWriter
-	Formatter LoggerFormatter
+	Level       LogLevel
+	Writers     []*LoggerWriter
+	Formatter   LoggerFormatter
+	LogFilePath string
+	LogFileSize int64
 }
 
 type LoggerWriter struct {
@@ -43,6 +48,7 @@ type LoggerWriter struct {
 
 // WriterInFile 设置将文件写入对应文件中
 func (logger *Logger) WriterInFile(logPath string) {
+	logger.LogFilePath = logPath
 	logger.AddWriter(FileWriter(path.Join(logPath, "all.log")), -1)
 	logger.AddWriter(FileWriter(path.Join(logPath, "debug.log")), LevelDebug)
 	logger.AddWriter(FileWriter(path.Join(logPath, "info.log")), LevelInfo)
@@ -142,7 +148,40 @@ func (logger *Logger) Print(level LogLevel, tag string, msg any, fields map[stri
 			colorStr := logger.Formatter.Format(param)
 			_, _ = fmt.Fprintln(writer.Out, colorStr)
 		} else if writer.Level == -1 || level == writer.Level {
+			logger.CheckFileSize(writer)
 			_, _ = fmt.Fprintln(writer.Out, commonStr)
+		}
+	}
+}
+
+// CheckFileSize 检查文件大小
+func (logger *Logger) CheckFileSize(writer *LoggerWriter) {
+	logFile := writer.Out.(*os.File)
+	if logFile != nil {
+		stat, err := logFile.Stat()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		size := stat.Size()
+		if logger.LogFileSize <= 0 {
+			logger.LogFileSize = 100 << 20
+		}
+		if size >= logger.LogFileSize {
+			_, file := path.Split(stat.Name())
+			index := strings.Index(file, ".")
+			if strings.Index(file, " ") != -1 && strings.Index(file, " ") < index {
+				index = strings.Index(file, " ")
+			}
+			filename := file[0:index]
+			fmt.Println(filename)
+			out := FileWriter(path.Join(logger.LogFilePath, utils.JoinStrings(
+				filename,
+				" ",
+				time.Now().Format("06-01-02 15:04:05"),
+				".log",
+			)))
+			writer.Out = out
 		}
 	}
 }

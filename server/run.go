@@ -21,6 +21,7 @@ func Log(next crpc.HandleFunc) crpc.HandleFunc {
 func main() {
 	logger := crpcLogger.TextLogger()
 	logger.WriterInFile("./log/")
+	logger.LogFileSize = 1 << 10
 	// 初始化引擎
 	engine := crpc.MakeEngine()
 	// 加载HTML

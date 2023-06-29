@@ -1,5 +1,0 @@
-[crpc] 2023/06/28 - 21:51:03 | DEBUG | [ MiddleWare ]:log pre handler
-[crpc] 2023/06/28 - 21:51:03 | INFO | [ MiddleWare ]:log post handler
-[crpc] 2023/06/28 - 21:52:25 | DEBUG | [ MiddleWare ]:log pre handler
-[crpc] 2023/06/28 - 21:52:25 | ERROR | [ /user/xmlParam ]:Key: 'User.Age' Error:Field validation for 'Age' failed on the 'min' tag
-[crpc] 2023/06/28 - 21:52:25 | INFO | [ MiddleWare ]:log post handler
