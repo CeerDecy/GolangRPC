@@ -19,6 +19,7 @@ func (w *Worker) running() {
 	for t := range w.task {
 		// 若t = nil 说明当前worker已经被释放掉
 		if t == nil {
+			w.pool.workerCache.Put(w)
 			return
 		}
 		t()

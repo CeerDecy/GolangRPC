@@ -18,13 +18,14 @@ var ErrorPoolReleased = errors.New("pool has been released")
 
 // Pool 协程池
 type Pool struct {
-	cap     int32         // 最大Worker容量
-	running int32         // 正在运行的Worker数量
-	workers []*Worker     // 空闲的Worker
-	expire  time.Duration // 过期时间
-	release chan sig      // 释放信号，释放后pool就不能使用了
-	lock    sync.Mutex    // 保证pool内部资源的并发安全
-	once    sync.Once     // 释放资源只能调用一次，不能多次调用
+	cap         int32         // 最大Worker容量
+	running     int32         // 正在运行的Worker数量
+	workers     []*Worker     // 空闲的Worker
+	expire      time.Duration // 过期时间
+	release     chan sig      // 释放信号，释放后pool就不能使用了
+	lock        sync.Mutex    // 保证pool内部资源的并发安全
+	once        sync.Once     // 释放资源只能调用一次，不能多次调用
+	workerCache sync.Pool     // 缓存
 }
 
 func NewTimePool(cap int32, expire int) (*Pool, error) {
@@ -38,6 +39,12 @@ func NewTimePool(cap int32, expire int) (*Pool, error) {
 		cap:     cap,
 		expire:  time.Duration(expire) * time.Second,
 		release: make(chan sig, 1),
+	}
+	p.workerCache.New = func() any {
+		return &Worker{
+			pool: p,
+			task: make(chan func(), 1),
+		}
 	}
 	go p.expireWorker()
 	return p, nil
@@ -72,7 +79,16 @@ func (p *Pool) GetWorker() *Worker {
 	}
 	// 还没达到容量，可以新建一个Worker
 	if p.running < p.cap {
-		worker := &Worker{pool: p, task: make(chan func(), 1), lastTime: time.Now()}
+		c := p.workerCache.Get()
+		var worker *Worker
+		if c == nil {
+			worker = &Worker{
+				pool: p,
+				task: make(chan func(), 1),
+			}
+		} else {
+			worker = c.(*Worker)
+		}
 		worker.run()
 		return worker
 	}
