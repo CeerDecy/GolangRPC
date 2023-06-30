@@ -189,7 +189,7 @@ func main() {
 		ctx.HandleWithError(err)
 	})
 
-	p, _ := pool.NewPool(6)
+	p, _ := pool.NewPool(3)
 	group.Get("/pool", func(ctx *crpc.Context) {
 		currentTime := time.Now()
 		var wg sync.WaitGroup
@@ -202,7 +202,7 @@ func main() {
 		_ = p.Submit(func() {
 			defer wg.Done()
 			fmt.Println("====2====")
-			time.Sleep(2 * time.Second)
+			time.Sleep(10 * time.Second)
 		})
 		_ = p.Submit(func() {
 			defer wg.Done()
@@ -212,12 +212,12 @@ func main() {
 		_ = p.Submit(func() {
 			defer wg.Done()
 			fmt.Println("====4====")
-			time.Sleep(2 * time.Second)
+			time.Sleep(3 * time.Second)
 		})
 		_ = p.Submit(func() {
 			defer wg.Done()
 			fmt.Println("====5====")
-			time.Sleep(2 * time.Second)
+			time.Sleep(3 * time.Second)
 		})
 		_ = p.Submit(func() {
 			defer wg.Done()

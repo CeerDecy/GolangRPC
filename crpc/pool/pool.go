@@ -2,6 +2,7 @@ package pool
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -9,10 +10,11 @@ import (
 
 type sig struct{}
 
-const DefaultExpire = 3
+const DefaultExpire = 2
 
 var ErrorInvalidCap = errors.New("pool cap can not <= 0")
 var ErrorInvalidExpire = errors.New("pool expire can not <= 0")
+var ErrorPoolReleased = errors.New("pool has been released")
 
 // Pool 协程池
 type Pool struct {
@@ -32,11 +34,13 @@ func NewTimePool(cap int32, expire int) (*Pool, error) {
 	if expire <= 0 {
 		return nil, ErrorInvalidExpire
 	}
-	return &Pool{
+	p := &Pool{
 		cap:     cap,
 		expire:  time.Duration(expire) * time.Second,
 		release: make(chan sig, 1),
-	}, nil
+	}
+	go p.expireWorker()
+	return p, nil
 }
 
 func NewPool(cap int32) (*Pool, error) {
@@ -44,6 +48,9 @@ func NewPool(cap int32) (*Pool, error) {
 }
 
 func (p *Pool) Submit(task func()) error {
+	if len(p.release) > 0 {
+		return ErrorPoolReleased
+	}
 	w := p.GetWorker()
 	w.task <- task
 	p.IncRunning()
@@ -96,4 +103,64 @@ func (p *Pool) PutWorker(w *Worker) {
 
 func (p *Pool) DecRunning() {
 	atomic.AddInt32(&p.running, -1)
+}
+
+// Release 释放协程池子
+func (p *Pool) Release() {
+	p.once.Do(func() {
+		p.lock.Lock()
+		for i := range p.workers {
+			p.workers[i].task = nil
+			p.workers[i].pool = nil
+			p.workers[i] = nil
+		}
+		p.workers = nil
+		p.lock.Unlock()
+		p.release <- sig{}
+	})
+}
+
+// IsClosed 是否已经关闭
+func (p *Pool) IsClosed() bool {
+	return len(p.release) > 0
+}
+
+// Restart Pool释放过后可以重启
+func (p *Pool) Restart() bool {
+	if !p.IsClosed() {
+		return true
+	}
+	_ = <-p.release
+	p.expireWorker()
+	return true
+}
+
+// 定期清理空闲的Worker
+func (p *Pool) expireWorker() {
+	ticker := time.NewTicker(p.expire)
+	for range ticker.C {
+		if p.IsClosed() {
+			break
+		}
+		p.lock.Lock()
+		// 遍历空闲Worker，判断其最后运行时间的差值是否大于expire,若大于则将其删除
+		n := len(p.workers) - 1
+		if n >= 0 {
+			for i := range p.workers {
+				if time.Now().Sub(p.workers[i].lastTime) >= p.expire {
+					n = i
+					p.workers[i].task <- nil
+				} else {
+					break
+				}
+			}
+			if n >= len(p.workers)-1 {
+				p.workers = p.workers[:0]
+			} else {
+				p.workers = p.workers[n+1:]
+			}
+			fmt.Printf("清除完成，running:%d,workers:%v\n", p.running, p.workers)
+		}
+		p.lock.Unlock()
+	}
 }
