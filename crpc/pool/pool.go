@@ -26,6 +26,7 @@ type Pool struct {
 	lock        sync.Mutex    // 保证pool内部资源的并发安全
 	once        sync.Once     // 释放资源只能调用一次，不能多次调用
 	workerCache sync.Pool     // 缓存
+	cond        *sync.Cond    // 条件变量
 }
 
 func NewTimePool(cap int32, expire int) (*Pool, error) {
@@ -46,6 +47,7 @@ func NewTimePool(cap int32, expire int) (*Pool, error) {
 			task: make(chan func(), 1),
 		}
 	}
+	p.cond = sync.NewCond(&p.lock)
 	go p.expireWorker()
 	return p, nil
 }
@@ -92,18 +94,7 @@ func (p *Pool) GetWorker() *Worker {
 		worker.run()
 		return worker
 	}
-	for {
-		p.lock.Lock()
-		n = len(p.workers) - 1
-		if n < 0 {
-			p.lock.Unlock()
-			continue
-		}
-		worker := p.workers[n]
-		p.workers = p.workers[:n]
-		p.lock.Unlock()
-		return worker
-	}
+	return p.waitIdleWorker()
 }
 
 func (p *Pool) IncRunning() {
@@ -113,6 +104,7 @@ func (p *Pool) IncRunning() {
 func (p *Pool) PutWorker(w *Worker) {
 	w.lastTime = time.Now()
 	p.lock.Lock()
+	p.cond.Signal()
 	defer p.lock.Unlock()
 	p.workers = append(p.workers, w)
 }
@@ -179,4 +171,20 @@ func (p *Pool) expireWorker() {
 		}
 		p.lock.Unlock()
 	}
+}
+
+// 使用sync.Cond等待有空闲的Worker，并返回
+func (p *Pool) waitIdleWorker() *Worker {
+	p.lock.Lock()
+	p.cond.Wait()
+	fmt.Println("有空闲的Worker了")
+	n := len(p.workers) - 1
+	if n < 0 {
+		p.lock.Unlock()
+		return p.waitIdleWorker()
+	}
+	worker := p.workers[n]
+	p.workers = p.workers[:n]
+	p.lock.Unlock()
+	return worker
 }
