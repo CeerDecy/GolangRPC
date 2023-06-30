@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
 	crpc_error "github/CeerDecy/RpcFrameWork/crpc/error"
+	"github/CeerDecy/RpcFrameWork/crpc/pool"
 	"github/CeerDecy/RpcFrameWork/server/models"
 	"log"
 	"net/http"
+	"sync"
+	"time"
 )
 
 func Log(next crpc.HandleFunc) crpc.HandleFunc {
@@ -186,6 +189,45 @@ func main() {
 		ctx.HandleWithError(err)
 	})
 
+	p, _ := pool.NewPool(6)
+	group.Get("/pool", func(ctx *crpc.Context) {
+		currentTime := time.Now()
+		var wg sync.WaitGroup
+		wg.Add(6)
+		_ = p.Submit(func() {
+			defer wg.Done()
+			fmt.Println("====6====")
+			time.Sleep(2 * time.Second)
+		})
+		_ = p.Submit(func() {
+			defer wg.Done()
+			fmt.Println("====2====")
+			time.Sleep(2 * time.Second)
+		})
+		_ = p.Submit(func() {
+			defer wg.Done()
+			fmt.Println("====3====")
+			time.Sleep(2 * time.Second)
+		})
+		_ = p.Submit(func() {
+			defer wg.Done()
+			fmt.Println("====4====")
+			time.Sleep(2 * time.Second)
+		})
+		_ = p.Submit(func() {
+			defer wg.Done()
+			fmt.Println("====5====")
+			time.Sleep(2 * time.Second)
+		})
+		_ = p.Submit(func() {
+			defer wg.Done()
+			fmt.Println("====1====")
+			time.Sleep(2 * time.Second)
+		})
+		wg.Wait()
+		logger.Info("Pool", fmt.Sprintf("start time:%v , end time:%v", currentTime.Format("15:04:05"), time.Now().Format("15:04:05")))
+		ctx.JSON(http.StatusOK, "success")
+	})
 	engine.Run(":8000")
 }
 
