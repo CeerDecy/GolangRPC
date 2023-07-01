@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 )
 
 const defaultMaxMemory = 32 << 20 // 32 MB
@@ -29,8 +30,27 @@ type Context struct {
 	isValidate            bool // 是否开启结构体校验
 	code                  int
 	Logger                *crpcLogger.Logger
+	Keys                  map[string]any
+	mu                    sync.RWMutex
 }
 
+func (c *Context) Set(key string, value any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.Keys == nil {
+		c.Keys = make(map[string]any)
+	}
+	c.Keys[key] = value
+}
+
+func (c *Context) Get(key string) (value any, ok bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	value, ok = c.Keys[key]
+	return
+}
+
+// DisallowUnknownFields 是否解析未知字段
 func (c *Context) DisallowUnknownFields() {
 	c.disallowUnknownFields = true
 }
@@ -313,4 +333,8 @@ func (c *Context) HandleWithError(err error) {
 		c.JSON(code, data)
 		return
 	}
+}
+
+func (c *Context) SetBasicAuth(username, password string) {
+	c.Request.Header.Set("Authorization", "Basic "+BasicAuth(username, password))
 }

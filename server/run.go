@@ -155,6 +155,10 @@ func main() {
 		ctx.JSON(http.StatusOK, user)
 	})
 
+	// 创建一个Basic账户认证的中间件
+	ware := crpc.NewAccountMiddleWare(nil)
+	ware.Users["猛喝威士忌"] = "123456"
+	fmt.Println(crpc.BasicAuth("猛喝威士忌", "123456"))
 	// XML RequestBody参数
 	group.Any("/xmlParam", func(ctx *crpc.Context) {
 		user := &models.User{}
@@ -169,7 +173,7 @@ func main() {
 			return
 		}
 		ctx.JSON(http.StatusOK, user)
-	})
+	}, ware.BasicAuth)
 
 	group.Get("/recovery", func(ctx *crpc.Context) {
 		panic("this is recovery request")
