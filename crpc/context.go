@@ -32,6 +32,11 @@ type Context struct {
 	Logger                *crpcLogger.Logger
 	Keys                  map[string]any
 	mu                    sync.RWMutex
+	sameSite              http.SameSite
+}
+
+func (c *Context) SetSameSite(site http.SameSite) {
+	c.sameSite = site
 }
 
 func (c *Context) Set(key string, value any) {
@@ -337,4 +342,21 @@ func (c *Context) HandleWithError(err error) {
 
 func (c *Context) SetBasicAuth(username, password string) {
 	c.Request.Header.Set("Authorization", "Basic "+BasicAuth(username, password))
+}
+
+// SetCookie 设置Cookie
+func (c *Context) SetCookie(name, value, path, domain string, maxAge int, secure, httpOnly bool) {
+	if path == "" {
+		path = "/"
+	}
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     name,
+		Value:    url.QueryEscape(value),
+		MaxAge:   maxAge,
+		Path:     path,
+		Domain:   domain,
+		Secure:   secure,
+		HttpOnly: httpOnly,
+		SameSite: c.sameSite,
+	})
 }

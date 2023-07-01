@@ -6,6 +6,7 @@ import (
 	"github/CeerDecy/RpcFrameWork/crpc"
 	crpc_error "github/CeerDecy/RpcFrameWork/crpc/error"
 	"github/CeerDecy/RpcFrameWork/crpc/pool"
+	"github/CeerDecy/RpcFrameWork/crpc/token"
 	"github/CeerDecy/RpcFrameWork/server/models"
 	"log"
 	"net/http"
@@ -233,6 +234,50 @@ func main() {
 		wg.Wait()
 		logger.Info("Pool", fmt.Sprintf("start time:%v , end time:%v", currentTime.Format("15:04:05"), time.Now().Format("15:04:05")))
 		ctx.JSON(http.StatusOK, "success")
+	})
+
+	group.Get("/login", func(ctx *crpc.Context) {
+		jwt := &token.JwtHandler{}
+		jwt.Key = []byte("123456")
+		jwt.SendCookie = true
+		jwt.TimeOut = 10 * time.Minute
+		jwt.RefreshTimeOut = 20 * time.Minute
+		jwt.Authenticator = func(ctx *crpc.Context) (map[string]any, error) {
+			data := make(map[string]any)
+			data["userId"] = 1
+			return data, nil
+		}
+		handler, err := jwt.LoginHandler(ctx)
+		if err != nil {
+			ctx.Logger.Error("/login", err)
+			ctx.JSON(http.StatusOK, err)
+			return
+		}
+		ctx.JSON(http.StatusOK, handler)
+	})
+
+	group.Get("/refresh", func(ctx *crpc.Context) {
+		jwt := &token.JwtHandler{}
+		jwt.Key = []byte("123456")
+		jwt.SendCookie = true
+		jwt.TimeOut = 10 * time.Minute
+		jwt.RefreshTimeOut = 20 * time.Minute
+		jwt.RefreshKey = "server_refresh_token"
+		ctx.Set(jwt.RefreshKey, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2ODgyMjIzNDYsImlhdCI6MTY4ODIyMTE0NiwidXNlcklkIjoxfQ.WxpzEfe0QIrR_84CLnazqybNFZjItV6aNbUmRb18PYY")
+		jwt.Authenticator = func(ctx *crpc.Context) (map[string]any, error) {
+			data := make(map[string]any)
+			data["userId"] = 1
+			return data, nil
+		}
+		handler, err := jwt.RefreshHandler(ctx)
+		if err != nil {
+			ctx.Logger.Error("/login", err)
+			ctx.JSON(http.StatusOK, map[string]any{
+				"error": err.Error(),
+			})
+			return
+		}
+		ctx.JSON(http.StatusOK, handler)
 	})
 	//engine.Run(":8000")
 	engine.RunTLS(":8080", "key/server.pem", "key/server.key")
