@@ -198,11 +198,12 @@ func main() {
 			defer wg.Done()
 			fmt.Println("====6====")
 			time.Sleep(2 * time.Second)
+			panic("6 panic")
 		})
 		_ = p.Submit(func() {
 			defer wg.Done()
 			fmt.Println("====2====")
-			time.Sleep(10 * time.Second)
+			time.Sleep(3 * time.Second)
 		})
 		_ = p.Submit(func() {
 			defer wg.Done()
@@ -224,11 +225,13 @@ func main() {
 			fmt.Println("====1====")
 			time.Sleep(2 * time.Second)
 		})
+		//p.Release()
 		wg.Wait()
 		logger.Info("Pool", fmt.Sprintf("start time:%v , end time:%v", currentTime.Format("15:04:05"), time.Now().Format("15:04:05")))
 		ctx.JSON(http.StatusOK, "success")
 	})
-	engine.Run(":8000")
+	//engine.Run(":8000")
+	engine.RunTLS(":8080", "key/server.pem", "key/server.key")
 }
 
 func a(n int, crErr *crpc_error.CrError) {

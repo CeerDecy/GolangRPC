@@ -3,6 +3,7 @@ package binding
 import (
 	"encoding/xml"
 	"errors"
+	"io"
 	"net/http"
 )
 
@@ -19,7 +20,7 @@ func (x xmlBinding) Bind(request *http.Request, model any) error {
 	}
 	decoder := xml.NewDecoder(request.Body)
 	err := decoder.Decode(model)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return err
 	}
 	return validate(model)

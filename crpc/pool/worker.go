@@ -1,6 +1,9 @@
 package pool
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Goroutine消费者
 
@@ -11,11 +14,24 @@ type Worker struct {
 }
 
 func (w *Worker) run() {
+	w.pool.IncRunning()
 	go w.running()
 }
 
 // 执行task队列
 func (w *Worker) running() {
+	defer func() {
+		w.pool.DecRunning()
+		w.pool.workerCache.Put(w)
+		if err := recover(); err != nil {
+			if w.pool.PanicHandler != nil {
+				w.pool.PanicHandler()
+			} else {
+				fmt.Println(err)
+			}
+			w.pool.cond.Signal()
+		}
+	}()
 	for t := range w.task {
 		// 若t = nil 说明当前worker已经被释放掉
 		if t == nil {
@@ -25,6 +41,5 @@ func (w *Worker) running() {
 		t()
 		// 执行完毕，需要将worker设置为空闲
 		w.pool.PutWorker(w)
-		w.pool.DecRunning()
 	}
 }

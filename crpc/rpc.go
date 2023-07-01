@@ -245,3 +245,15 @@ func (e *Engine) UseMiddleWare(middles ...MiddleWareFunc) {
 func (e *Engine) RegisterErrorHandler(handler ErrorHandler) {
 	e.errorHandler = handler
 }
+
+// RunTLS 开启HTTPS
+func (e *Engine) RunTLS(addr, certFile, keyFile string) {
+	err := http.ListenAndServeTLS(addr, certFile, keyFile, e.Handler())
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
+func (e *Engine) Handler() http.Handler {
+	return e
+}

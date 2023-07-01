@@ -10,7 +10,7 @@ import (
 
 type sig struct{}
 
-const DefaultExpire = 2
+const DefaultExpire = 3
 
 var ErrorInvalidCap = errors.New("pool cap can not <= 0")
 var ErrorInvalidExpire = errors.New("pool expire can not <= 0")
@@ -18,15 +18,16 @@ var ErrorPoolReleased = errors.New("pool has been released")
 
 // Pool 协程池
 type Pool struct {
-	cap         int32         // 最大Worker容量
-	running     int32         // 正在运行的Worker数量
-	workers     []*Worker     // 空闲的Worker
-	expire      time.Duration // 过期时间
-	release     chan sig      // 释放信号，释放后pool就不能使用了
-	lock        sync.Mutex    // 保证pool内部资源的并发安全
-	once        sync.Once     // 释放资源只能调用一次，不能多次调用
-	workerCache sync.Pool     // 缓存
-	cond        *sync.Cond    // 条件变量
+	cap          int32         // 最大Worker容量
+	running      int32         // 正在运行的Worker数量
+	workers      []*Worker     // 空闲的Worker
+	expire       time.Duration // 过期时间
+	release      chan sig      // 释放信号，释放后pool就不能使用了
+	lock         sync.Mutex    // 保证pool内部资源的并发安全
+	once         sync.Once     // 释放资源只能调用一次，不能多次调用
+	workerCache  sync.Pool     // 缓存
+	cond         *sync.Cond    // 条件变量
+	PanicHandler func()
 }
 
 func NewTimePool(cap int32, expire int) (*Pool, error) {
@@ -62,7 +63,6 @@ func (p *Pool) Submit(task func()) error {
 	}
 	w := p.GetWorker()
 	w.task <- task
-	p.IncRunning()
 	return nil
 }
 
@@ -71,16 +71,17 @@ func (p *Pool) GetWorker() *Worker {
 	// 1. 若有空闲的Worker直接获取
 	// 2. 如果没有空闲的Worker，则新建一个Worker
 	// 3. 若正在运行的Workers 大于 Pool的容量，则阻塞等待worker释放
+	p.lock.Lock()
 	n := len(p.workers) - 1
 	if n >= 0 {
-		p.lock.Lock()
-		defer p.lock.Unlock()
 		worker := p.workers[n]
 		p.workers = p.workers[:n]
+		p.lock.Unlock()
 		return worker
 	}
 	// 还没达到容量，可以新建一个Worker
 	if p.running < p.cap {
+		p.lock.Unlock()
 		c := p.workerCache.Get()
 		var worker *Worker
 		if c == nil {
@@ -94,6 +95,7 @@ func (p *Pool) GetWorker() *Worker {
 		worker.run()
 		return worker
 	}
+	p.lock.Unlock()
 	return p.waitIdleWorker()
 }
 
@@ -154,18 +156,22 @@ func (p *Pool) expireWorker() {
 		// 遍历空闲Worker，判断其最后运行时间的差值是否大于expire,若大于则将其删除
 		n := len(p.workers) - 1
 		if n >= 0 {
+			clearN := -1
 			for i := range p.workers {
 				if time.Now().Sub(p.workers[i].lastTime) >= p.expire {
-					n = i
+					clearN = i
 					p.workers[i].task <- nil
+					p.workers[i] = nil
 				} else {
 					break
 				}
 			}
-			if n >= len(p.workers)-1 {
-				p.workers = p.workers[:0]
-			} else {
-				p.workers = p.workers[n+1:]
+			if clearN != -1 {
+				if clearN >= len(p.workers)-1 {
+					p.workers = p.workers[:0]
+				} else {
+					p.workers = p.workers[clearN+1:]
+				}
 			}
 			fmt.Printf("清除完成，running:%d,workers:%v\n", p.running, p.workers)
 		}
@@ -181,6 +187,20 @@ func (p *Pool) waitIdleWorker() *Worker {
 	n := len(p.workers) - 1
 	if n < 0 {
 		p.lock.Unlock()
+		if p.running < p.cap {
+			c := p.workerCache.Get()
+			var worker *Worker
+			if c == nil {
+				worker = &Worker{
+					pool: p,
+					task: make(chan func(), 1),
+				}
+			} else {
+				worker = c.(*Worker)
+			}
+			worker.run()
+			return worker
+		}
 		return p.waitIdleWorker()
 	}
 	worker := p.workers[n]
