@@ -256,8 +256,8 @@ func main() {
 		ctx.JSON(http.StatusOK, handler)
 	})
 
+	jwt := &token.JwtHandler{}
 	group.Get("/refresh", func(ctx *crpc.Context) {
-		jwt := &token.JwtHandler{}
 		jwt.Key = []byte("123456")
 		jwt.SendCookie = true
 		jwt.TimeOut = 10 * time.Minute
@@ -278,7 +278,7 @@ func main() {
 			return
 		}
 		ctx.JSON(http.StatusOK, handler)
-	})
+	}, jwt.AuthInterceptor)
 	//engine.Run(":8000")
 	engine.RunTLS(":8080", "key/server.pem", "key/server.key")
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/golang-jwt/jwt/v4"
 	"github/CeerDecy/RpcFrameWork/crpc"
+	"net/http"
 	"time"
 )
 
@@ -24,6 +25,8 @@ type JwtHandler struct {
 	CookieDomain   string
 	CookieSecure   bool
 	CookieHttpOnly bool
+	Header         string
+	AuthHandler    func(ctx *crpc.Context, err error)
 }
 type JwtResponse struct {
 	Toke         string `json:"toke"`
@@ -149,7 +152,7 @@ func (j *JwtHandler) RefreshHandler(ctx *crpc.Context) (*JwtResponse, error) {
 	// 解析token
 	parse, err := jwt.Parse(refresh.(string), func(token *jwt.Token) (interface{}, error) {
 		if j.usingPublicKeyAlgo() {
-			return j.PrivateKey, nil
+			return []byte(j.PrivateKey), nil
 		} else {
 			return j.Key, nil
 		}
@@ -208,4 +211,54 @@ func (j *JwtHandler) RefreshHandler(ctx *crpc.Context) (*JwtResponse, error) {
 		)
 	}
 	return response, nil
+}
+
+// jwt登录中间件
+
+func (j *JwtHandler) AuthInterceptor(next crpc.HandleFunc) crpc.HandleFunc {
+	return func(ctx *crpc.Context) {
+		if j.Header == "" {
+			j.Header = "Authorization"
+		}
+		token := ctx.Request.Header.Get(j.Header)
+		if token == "" {
+			if j.SendCookie {
+				cookie, err := ctx.Request.Cookie(j.CookieName)
+				if err != nil {
+					j.AuthErrorHandler(ctx, err)
+					return
+				}
+				token = cookie.String()
+			}
+		}
+		if token == "" {
+			j.AuthErrorHandler(ctx, errors.New("token is null"))
+			return
+		}
+		// 解析Token
+		parse, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+			if j.usingPublicKeyAlgo() {
+				return []byte(j.PrivateKey), nil
+			} else {
+				return j.Key, nil
+			}
+		})
+		if err != nil {
+			j.AuthErrorHandler(ctx, err)
+			return
+		}
+		claims := parse.Claims.(jwt.MapClaims)
+		ctx.Set("jwt_claims", claims)
+		next(ctx)
+	}
+}
+
+func (j *JwtHandler) AuthErrorHandler(ctx *crpc.Context, err error) {
+	if j.AuthHandler != nil {
+		j.AuthHandler(ctx, nil)
+	} else {
+		ctx.JSON(http.StatusUnauthorized, map[string]any{
+			"error": err.Error(),
+		})
+	}
 }
