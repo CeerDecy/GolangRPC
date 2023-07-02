@@ -2,6 +2,7 @@ package crpc
 
 import (
 	"fmt"
+	"github/CeerDecy/RpcFrameWork/crpc/config"
 	"github/CeerDecy/RpcFrameWork/crpc/crpcLogger"
 	"github/CeerDecy/RpcFrameWork/crpc/render"
 	"github/CeerDecy/RpcFrameWork/crpc/utils"
@@ -162,6 +163,14 @@ func MakeEngine() *Engine {
 func DefaultEngine() *Engine {
 	engine := MakeEngine()
 	engine.Logger = crpcLogger.TextLogger()
+	if path, ok := config.Conf.Log["path"]; ok {
+		if size, ok := config.Conf.Log["size"]; ok {
+			engine.Logger.WriterInFile(path.(string))
+			engine.Logger.LogFileSize = size.(int64) << 20
+		} else {
+			log.Fatalln("log size config is null")
+		}
+	}
 	engine.router.engine = engine
 	return engine
 }

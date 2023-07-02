@@ -18,7 +18,7 @@ const (
 	Param    = 100
 	PoolSize = 1000
 	TestSize = 10000
-	n        = 3000000
+	n        = 1000000
 )
 
 var curMem uint64

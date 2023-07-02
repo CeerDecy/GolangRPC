@@ -3,6 +3,7 @@ package pool
 import (
 	"errors"
 	"fmt"
+	"github/CeerDecy/RpcFrameWork/crpc/config"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,6 +56,14 @@ func NewTimePool(cap int32, expire int) (*Pool, error) {
 
 func NewPool(cap int32) (*Pool, error) {
 	return NewTimePool(cap, DefaultExpire)
+}
+
+func NewPoolConf() (*Pool, error) {
+	c, ok := config.Conf.Pool["cap"]
+	if !ok {
+		return nil, errors.New("config cap is null")
+	}
+	return NewPool(c.(int32))
 }
 
 func (p *Pool) Submit(task func()) error {

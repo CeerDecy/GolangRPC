@@ -36,16 +36,15 @@ func main() {
 		return http.StatusInternalServerError, data
 	})
 	logger := engine.Logger
-	logger.WriterInFile("./log/")
-	logger.LogFileSize = 1 << 20
 	// 加载HTML
 	engine.LoadTemplate("static/html/*.html")
 	group := engine.CreateGroup("user")
 	group.UseMiddleWare(func(next crpc.HandleFunc) crpc.HandleFunc {
 		return func(ctx *crpc.Context) {
-			logger.Info("MiddleWare", "log pre handler")
+
+			ctx.Logger.Info("MiddleWare", "log pre handler")
 			next(ctx)
-			logger.Info("MiddleWare", ctx.Writer.Header().Get("Content-Type"))
+			ctx.Logger.Info("MiddleWare", ctx.Writer.Header().Get("Content-Type"))
 		}
 	})
 	// **通配符
@@ -159,7 +158,7 @@ func main() {
 	// 创建一个Basic账户认证的中间件
 	ware := crpc.NewAccountMiddleWare(nil)
 	ware.Users["猛喝威士忌"] = "123456"
-	fmt.Println(crpc.BasicAuth("猛喝威士忌", "123456"))
+	//fmt.Println(crpc.BasicAuth("猛喝威士忌", "123456"))
 	// XML RequestBody参数
 	group.Any("/xmlParam", func(ctx *crpc.Context) {
 		user := &models.User{}
@@ -174,7 +173,7 @@ func main() {
 			return
 		}
 		ctx.JSON(http.StatusOK, user)
-	}, ware.BasicAuth)
+	})
 
 	group.Get("/recovery", func(ctx *crpc.Context) {
 		panic("this is recovery request")
@@ -194,7 +193,7 @@ func main() {
 		ctx.HandleWithError(err)
 	})
 
-	p, _ := pool.NewPool(3)
+	p, _ := pool.NewPoolConf()
 	group.Get("/pool", func(ctx *crpc.Context) {
 		currentTime := time.Now()
 		var wg sync.WaitGroup
@@ -270,8 +269,12 @@ func main() {
 			return data, nil
 		}
 		handler, err := jwt.RefreshHandler(ctx)
+		ctx.Logger.Info("/refresh", "Okay")
+		fmt.Println(err)
 		if err != nil {
-			ctx.Logger.Error("/login", err)
+			fmt.Println(err)
+			logger.Error("/refresh", err)
+			ctx.Logger.Error("/refresh", err)
 			ctx.JSON(http.StatusOK, map[string]any{
 				"error": err.Error(),
 			})
