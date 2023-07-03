@@ -22,3 +22,7 @@ func TestSaveUserBatch(t *testing.T) {
 func TestUpdate(t *testing.T) {
 	Update()
 }
+
+func TestSelectOne(t *testing.T) {
+	SelectOne()
+}

@@ -45,7 +45,12 @@ func SaveUserBatch(users []any) {
 func Update() {
 	source := fmt.Sprintf("root:174878@tcp(nullpoint.com.cn:3306)/crpc?charset=utf8&loc=%s&parseTime=true", url.QueryEscape("Asia/Shanghai"))
 	db := orm.Open("mysql", source)
-	id, _, err := db.NewSession().Table("user").Where("id", 10000).Update("age", 10)
+	user := &User{
+		Username: "手写的从前",
+		Password: "231412312",
+		Age:      23,
+	}
+	id, _, err := db.NewSession().Table("user").Where("id", 10000).Update(user)
 	if err != nil {
 		panic(err)
 	}
@@ -54,4 +59,18 @@ func Update() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func SelectOne() {
+	source := fmt.Sprintf("root:174878@tcp(nullpoint.com.cn:3306)/crpc?charset=utf8&loc=%s&parseTime=true", url.QueryEscape("Asia/Shanghai"))
+	db := orm.Open("mysql", source)
+	user := new(User)
+	err := db.NewSession().
+		Table("user").
+		Where("id", 10000).
+		SelectOne(user)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Printf("%+v", user)
 }

@@ -219,12 +219,40 @@ func (session *CrSession) batchValue(data []any) {
 	session.db.logger.Info("batchValue", fmt.Sprintf("%v", session.values))
 }
 
+// Where 添加where条件查询 默认拼接是and
 func (session *CrSession) Where(field string, value any) *CrSession {
 	if session.whereParam.String() == "" {
 		session.whereParam.WriteString("where ")
 	} else {
-		session.whereParam.WriteString(",")
+		session.whereParam.WriteString(" and ")
+	}
+	session.whereParam.WriteString(field)
+	session.whereParam.WriteString(" = ")
+	session.whereParam.WriteString(" ? ")
+	session.whereValue = append(session.whereValue, value)
+	return session
+}
 
+// AND 以and的形式拼接where条件
+func (session *CrSession) AND(field string, value any) *CrSession {
+	if session.whereParam.String() == "" {
+		session.whereParam.WriteString("where ")
+	} else {
+		session.whereParam.WriteString(" and ")
+	}
+	session.whereParam.WriteString(field)
+	session.whereParam.WriteString(" = ")
+	session.whereParam.WriteString(" ? ")
+	session.whereValue = append(session.whereValue, value)
+	return session
+}
+
+// OR 以or的形式拼接where条件
+func (session *CrSession) OR(field string, value any) *CrSession {
+	if session.whereParam.String() == "" {
+		session.whereParam.WriteString("where ")
+	} else {
+		session.whereParam.WriteString(" or ")
 	}
 	session.whereParam.WriteString(field)
 	session.whereParam.WriteString(" = ")
@@ -249,7 +277,40 @@ func (session *CrSession) Update(data ...any) (int64, int64, error) {
 		session.updateParam.WriteString("= ? ")
 		session.values = append(session.values, data[1])
 	} else {
-
+		// 反射
+		t := reflect.TypeOf(data[0])
+		v := reflect.ValueOf(data[0])
+		if t.Kind() != reflect.Pointer {
+			panic(errors.New("data must be pointer"))
+		}
+		tVar := t.Elem()
+		vVar := v.Elem()
+		for i := 0; i < tVar.NumField(); i++ {
+			fieldName := tVar.Field(i).Name
+			tag := tVar.Field(i).Tag
+			sqlTag := tag.Get("corm")
+			if sqlTag == "" {
+				sqlTag = strings.ToLower(Name(fieldName))
+			} else {
+				if strings.Contains(sqlTag, "auto_increment") {
+					continue
+				}
+				if strings.Contains(sqlTag, ",") {
+					sqlTag = sqlTag[:strings.Index(sqlTag, ",")]
+				}
+			}
+			if sqlTag == "id" && isAutoId(vVar.Field(i).Interface()) {
+				continue
+			}
+			//session.FieldName = append(session.FieldName, sqlTag)
+			//session.placeHolder = append(session.placeHolder, "?")
+			if session.updateParam.String() != "" {
+				session.updateParam.WriteString(",")
+			}
+			session.updateParam.WriteString(sqlTag)
+			session.updateParam.WriteString("= ? ")
+			session.values = append(session.values, vVar.Field(i).Interface())
+		}
 	}
 	query := fmt.Sprintf("UPDATE %s SET %s",
 		session.TableName, session.updateParam.String(),
@@ -317,4 +378,69 @@ func Name(name string) string {
 	}
 	builder.WriteString(names[lastIndex:])
 	return builder.String()
+}
+
+func (session *CrSession) SelectOne(data any, fields ...string) error {
+	t := reflect.TypeOf(data)
+	if t.Kind() != reflect.Pointer {
+		return errors.New("data is not a pointer")
+	}
+	var fieldsBuilder string
+	if len(fields) == 0 {
+		fieldsBuilder = "*"
+	} else {
+		fieldsBuilder = strings.Join(fields, ",")
+	}
+	query := fmt.Sprintf("select %s from %s ", fieldsBuilder, session.TableName)
+	var builder strings.Builder
+	builder.WriteString(query)
+	builder.WriteString(session.whereParam.String())
+	session.db.logger.Info("SelectOne", builder.String())
+	stmt, err := session.db.db.Prepare(builder.String())
+	if err != nil {
+		return err
+	}
+	row, err := stmt.Query(session.whereValue...)
+	if err != nil {
+		return err
+	}
+	columns, err := row.Columns()
+	if err != nil {
+		return err
+	}
+	values := make([]any, len(columns))
+	fieldScan := make([]any, len(columns))
+	for i := range fieldScan {
+		fieldScan[i] = &values[i]
+	}
+	if row.Next() {
+		err = row.Scan(fieldScan...)
+		if err != nil {
+			return err
+		}
+		tVar := t.Elem()
+		vVar := reflect.ValueOf(data).Elem()
+		for i := 0; i < tVar.NumField(); i++ {
+			name := tVar.Field(i).Name
+			tag := tVar.Field(i).Tag
+			sqlTag := tag.Get("corm")
+			if sqlTag == "" {
+				sqlTag = strings.ToLower(Name(name))
+			} else {
+				if strings.Contains(sqlTag, ",") {
+					sqlTag = sqlTag[:strings.Index(sqlTag, ",")]
+				}
+			}
+			for j, col := range columns {
+				if sqlTag == col {
+					target := values[j]
+					targetValue := reflect.ValueOf(target)
+					fieldType := tVar.Field(i).Type
+					result := reflect.ValueOf(targetValue.Interface()).Convert(fieldType)
+					vVar.Field(i).Set(result)
+				}
+			}
+		}
+	}
+	return nil
 }
