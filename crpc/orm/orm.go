@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+type WhereMethod string
+
+const (
+	OR  WhereMethod = "OR"
+	AND WhereMethod = "AND"
+)
+
 type CrDB struct {
 	db     *sql.DB
 	logger *crpcLogger.Logger
@@ -21,6 +28,9 @@ type CrSession struct {
 	FieldName   []string
 	placeHolder []string
 	values      []any
+	updateParam strings.Builder
+	whereParam  strings.Builder
+	whereValue  []any
 }
 
 func (c *CrDB) Close() error {
@@ -207,6 +217,65 @@ func (session *CrSession) batchValue(data []any) {
 		}
 	}
 	session.db.logger.Info("batchValue", fmt.Sprintf("%v", session.values))
+}
+
+func (session *CrSession) Where(field string, value any) *CrSession {
+	if session.whereParam.String() == "" {
+		session.whereParam.WriteString("where ")
+	} else {
+		session.whereParam.WriteString(",")
+
+	}
+	session.whereParam.WriteString(field)
+	session.whereParam.WriteString(" = ")
+	session.whereParam.WriteString(" ? ")
+	session.whereValue = append(session.whereValue, value)
+	return session
+}
+
+func (session *CrSession) Update(data ...any) (int64, int64, error) {
+	if len(data) == 0 || len(data) > 2 {
+		return -1, -1, errors.New("param not valid")
+	}
+	single := true
+	if len(data) == 2 {
+		single = false
+	}
+	if !single {
+		if session.updateParam.String() != "" {
+			session.updateParam.WriteString(",")
+		}
+		session.updateParam.WriteString(data[0].(string))
+		session.updateParam.WriteString("= ? ")
+		session.values = append(session.values, data[1])
+	} else {
+
+	}
+	query := fmt.Sprintf("UPDATE %s SET %s",
+		session.TableName, session.updateParam.String(),
+	)
+	var builder strings.Builder
+	builder.WriteString(query)
+	builder.WriteString(session.whereParam.String())
+	session.db.logger.Info("Update", builder.String())
+	stmt, err := session.db.db.Prepare(builder.String())
+	if err != nil {
+		return -1, -1, err
+	}
+	session.values = append(session.values, session.whereValue...)
+	r, err := stmt.Exec(session.values...)
+	if err != nil {
+		return -1, -1, err
+	}
+	id, err := r.LastInsertId()
+	if err != nil {
+		return -1, -1, err
+	}
+	affected, err := r.RowsAffected()
+	if err != nil {
+		return -1, -1, err
+	}
+	return id, affected, nil
 }
 
 // 判断是否为自增id

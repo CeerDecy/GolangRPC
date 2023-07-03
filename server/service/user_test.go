@@ -18,3 +18,7 @@ func TestSaveUserBatch(t *testing.T) {
 	}
 	SaveUserBatch(users)
 }
+
+func TestUpdate(t *testing.T) {
+	Update()
+}
