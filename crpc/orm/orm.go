@@ -133,6 +133,83 @@ func (session *CrSession) fieldNames(data any) {
 	}
 }
 
+func (session *CrSession) InsertBatch(data []any) (int64, int64, error) {
+	if len(data) == 0 {
+		return -1, -1, errors.New("no data insert")
+	}
+	session.fieldNames(data[0])
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES",
+		session.TableName,
+		strings.Join(session.FieldName, ","),
+		//strings.Join(session.placeHolder, ","),
+	)
+	var builder strings.Builder
+	builder.WriteString(query)
+	for index := range data {
+		builder.WriteString("(")
+		builder.WriteString(strings.Join(session.placeHolder, ","))
+		builder.WriteString(")")
+		if index < len(data)-1 {
+			builder.WriteString(",")
+		}
+	}
+	session.batchValue(data)
+	session.db.logger.Info("["+session.TableName+"]", builder.String())
+	stmt, err := session.db.db.Prepare(builder.String())
+	if err != nil {
+		return -1, -1, err
+	}
+	r, err := stmt.Exec(session.values...)
+	if err != nil {
+		return -1, -1, err
+	}
+	id, err := r.LastInsertId()
+	if err != nil {
+		return -1, -1, err
+	}
+	affected, err := r.RowsAffected()
+	if err != nil {
+		return -1, -1, err
+	}
+	return id, affected, nil
+}
+
+// 解析value站位
+func (session *CrSession) batchValue(data []any) {
+	session.values = make([]any, 0)
+	for _, value := range data {
+		// 反射
+		t := reflect.TypeOf(value)
+		v := reflect.ValueOf(value)
+		if t.Kind() != reflect.Pointer {
+			panic(errors.New("data must be pointer"))
+		}
+		tVar := t.Elem()
+		vVar := v.Elem()
+		for i := 0; i < tVar.NumField(); i++ {
+			fieldName := tVar.Field(i).Name
+			tag := tVar.Field(i).Tag
+			sqlTag := tag.Get("corm")
+			if sqlTag == "" {
+				sqlTag = strings.ToLower(Name(fieldName))
+			} else {
+				if strings.Contains(sqlTag, "auto_increment") {
+					continue
+				}
+				if strings.Contains(sqlTag, ",") {
+					sqlTag = sqlTag[:strings.Index(sqlTag, ",")]
+				}
+			}
+			if sqlTag == "id" && isAutoId(vVar.Field(i).Interface()) {
+				continue
+			}
+			session.values = append(session.values, vVar.Field(i).Interface())
+		}
+	}
+	session.db.logger.Info("batchValue", fmt.Sprintf("%v", session.values))
+}
+
+// 判断是否为自增id
 func isAutoId(id any) bool {
 	t := reflect.TypeOf(id)
 	switch t.Kind() {

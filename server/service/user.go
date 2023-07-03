@@ -27,3 +27,17 @@ func SaveUser(user *User) {
 		panic(err)
 	}
 }
+
+func SaveUserBatch(users []any) {
+	source := fmt.Sprintf("root:174878@tcp(nullpoint.com.cn:3306)/crpc?charset=utf8&loc=%s&parseTime=true", url.QueryEscape("Asia/Shanghai"))
+	db := orm.Open("mysql", source)
+	id, _, err := db.NewSession().Table("user").InsertBatch(users)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(id)
+	err = db.Close()
+	if err != nil {
+		panic(err)
+	}
+}
