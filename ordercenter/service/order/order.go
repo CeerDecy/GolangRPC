@@ -5,6 +5,7 @@ import (
 	"github/CeerDecy/RpcFrameWork/crpc"
 	"github/CeerDecy/RpcFrameWork/crpc/rpc"
 	"github/CeerDecy/RpcFrameWork/ordercenter/model"
+	"github/CeerDecy/RpcFrameWork/ordercenter/service"
 	"net/http"
 )
 
@@ -13,7 +14,10 @@ const tag = "OrderService"
 func Find(ctx *crpc.Context) {
 	// 以http的方式进行调用
 	client := rpc.NewHttpClient()
-	buf, err := client.Get("http://127.0.0.1:8001/goods/find")
+	client.RegisterHttpService("goods", &service.GoodsService{})
+	//params := make(map[string]any)
+	//buf, err := client.Get("http://127.0.0.1:8001/goods/find", nil)
+	buf, err := client.Do("goods", "Find").(*service.GoodsService).Find(nil)
 	if err != nil {
 		ctx.Logger.Error(tag, err.Error())
 		ctx.JSON(http.StatusOK, model.SuccessResponse(err.Error()))

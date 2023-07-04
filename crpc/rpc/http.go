@@ -9,16 +9,18 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 )
 
-const tag = "HttpClient"
+//const tag = "HttpClient"
 
 type RequestParam map[string]any
 
 type HttpClient struct {
-	client http.Client
+	client     http.Client
+	serviceMap map[string]CrService
 }
 
 // NewHttpClient 获取一个Http客户端
@@ -34,6 +36,7 @@ func NewHttpClient() *HttpClient {
 				ExpectContinueTimeout: 1 * time.Second,
 			},
 		},
+		serviceMap: make(map[string]CrService),
 	}
 }
 
@@ -102,9 +105,8 @@ func (c *HttpClient) PostJson(url string, args map[string]any) ([]byte, error) {
 
 // 处理请求并读取响应体Body返回数据
 func (c *HttpClient) responseHandle(request *http.Request) (res []byte, err error) {
-	defer request.Body.Close()
+	//defer request.Body.Close()
 	response, err := c.client.Do(request)
-	defer response.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +128,85 @@ func (c *HttpClient) responseHandle(request *http.Request) (res []byte, err erro
 			break
 		}
 	}
+	response.Body.Close()
 	return body, nil
+}
+
+type HttpConfig struct {
+	Protocol string
+	Host     string
+	Port     int
+}
+
+const HTTP = "http"
+const HTTPS = "https"
+
+func (h *HttpConfig) Url() string {
+	switch h.Protocol {
+	case HTTP, "":
+		return fmt.Sprintf("http://%s:%d", h.Host, h.Port)
+	case HTTPS:
+		return fmt.Sprintf("https://%s:%d", h.Host, h.Port)
+	default:
+		panic(errors.New("unknown protocol"))
+	}
+}
+
+type CrService interface {
+	Evn() *HttpConfig
+}
+
+func (c *HttpClient) RegisterHttpService(name string, service CrService) {
+	c.serviceMap[name] = service
+}
+
+func (c *HttpClient) Do(serviceName string, method string) CrService {
+	service, ok := c.serviceMap[serviceName]
+	if !ok {
+		panic(errors.New("service not found"))
+	}
+	t := reflect.TypeOf(service)
+	v := reflect.ValueOf(service)
+	if t.Kind() != reflect.Pointer {
+		panic(errors.New("type is not a pointer"))
+	}
+	tVar := t.Elem()
+	vVar := v.Elem()
+	fieldIndex := -1
+	for i := 0; i < tVar.NumField(); i++ {
+		name := tVar.Field(i).Name
+		if name == method {
+			fieldIndex = i
+			break
+		}
+	}
+	if fieldIndex == -1 {
+		panic(errors.New("method is not exist"))
+	}
+	tag := tVar.Field(fieldIndex).Tag
+	if tag == "" {
+		panic(errors.New("crpc tag not found"))
+	}
+	rpcInfo := tag.Get("crpc")
+	split := strings.Split(rpcInfo, ",")
+	config := service.Evn()
+	if len(split) != 2 {
+		panic(errors.New("crpc tag not valid"))
+	}
+	f := func(args map[string]any) ([]byte, error) {
+		if split[0] == "GET" {
+			return c.Get(config.Url()+split[1], args)
+		}
+		if split[0] == "POST_FORM" {
+			return c.PostForm(config.Url()+split[1], args)
+		}
+		if split[0] == "POST_JSON" || split[0] == "POST" {
+			return c.PostJson(config.Url()+split[1], args)
+		}
+		return nil, errors.New("unknown method")
+	}
+	vVar.Field(fieldIndex).Set(reflect.ValueOf(f))
+	return service
 }
 
 // 解析Map中的参数
