@@ -26,3 +26,7 @@ func TestUpdate(t *testing.T) {
 func TestSelectOne(t *testing.T) {
 	SelectOne()
 }
+
+func TestCount(t *testing.T) {
+	Count()
+}

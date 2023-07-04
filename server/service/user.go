@@ -74,3 +74,13 @@ func SelectOne() {
 	}
 	fmt.Printf("%+v", user)
 }
+
+func Count() {
+	source := fmt.Sprintf("root:174878@tcp(nullpoint.com.cn:3306)/crpc?charset=utf8&loc=%s&parseTime=true", url.QueryEscape("Asia/Shanghai"))
+	db := orm.Open("mysql", source)
+	count, err := db.NewSession().Table("user").Count()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(count)
+}

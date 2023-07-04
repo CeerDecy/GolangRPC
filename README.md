@@ -70,6 +70,20 @@ sync.Cond是基于互斥锁/读写锁实现的条件变量，用来协调那些�
 #### 4. Bearer认证
 1. JWT
 
+### 七、ORM
+#### 1. Insert
+#### 2. 批量Insert
+#### 3. Update
+#### 4. Select
+#### 5. 条件查询
+#### 6. 聚合函数
+
+### 八、RPC
+#### 1. 实现内置HttpClient，用于RPC调用（回头记得实现以下Client的池化处理）
+
+
+
+
 
 
 

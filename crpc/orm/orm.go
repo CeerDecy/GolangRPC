@@ -444,3 +444,39 @@ func (session *CrSession) SelectOne(data any, fields ...string) error {
 	}
 	return nil
 }
+
+func (session *CrSession) Count() (int64, error) {
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s ", session.TableName)
+	var builder strings.Builder
+	builder.WriteString(query)
+	builder.WriteString(session.whereParam.String())
+	stmt, err := session.db.db.Prepare(query)
+	if err != nil {
+		return -1, err
+	}
+	row := stmt.QueryRow(session.whereValue...)
+	if row.Err() != nil {
+		return -1, row.Err()
+	}
+	var res int64
+	err = row.Scan(&res)
+	if err != nil {
+		return -1, err
+	}
+	return res, nil
+}
+
+func (session *CrSession) Exec(sql string, values ...any) (int64, error) {
+	stmt, err := session.db.db.Prepare(sql)
+	if err != nil {
+		return 0, err
+	}
+	result, err := stmt.Exec(values...)
+	if err != nil {
+		return 0, err
+	}
+	if strings.Contains(strings.ToLower(sql), "insert") {
+		return result.LastInsertId()
+	}
+	return result.RowsAffected()
+}

@@ -19,7 +19,7 @@ func loadToml() {
 	configFile := flag.String("conf", "conf/app.toml", "app config file")
 	flag.Parse()
 	if _, err := os.Stat(*configFile); err != nil {
-		Conf.logger.Error("config", "conf/app.toml file not load,because not exist")
+		Conf.logger.Debug("config", "conf/app.toml file not load,because not exist")
 		return
 	}
 	_, err := toml.DecodeFile(*configFile, Conf)
