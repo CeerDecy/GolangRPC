@@ -1,9 +1,11 @@
 package order
 
 import (
+	"context"
 	"encoding/json"
 	"github/CeerDecy/RpcFrameWork/crpc"
 	"github/CeerDecy/RpcFrameWork/crpc/rpc"
+	"github/CeerDecy/RpcFrameWork/ordercenter/api"
 	"github/CeerDecy/RpcFrameWork/ordercenter/model"
 	"github/CeerDecy/RpcFrameWork/ordercenter/service"
 	"net/http"
@@ -27,4 +29,16 @@ func Find(ctx *crpc.Context) {
 	err = json.Unmarshal(buf, res)
 	ctx.Logger.Info(tag, string(buf))
 	ctx.JSON(http.StatusOK, model.SuccessResponse(res.Data))
+}
+
+func FindGrpc(ctx *crpc.Context) {
+	client, err := rpc.NewGrpcClient(rpc.DefaultGrpcClientConfig("127.0.0.1:9000"))
+	if err != nil {
+		ctx.Logger.Error("FindGrpc", err.Error())
+	}
+	defer client.Conn.Close()
+	client.Conn.Connect()
+	goodsApiClient := api.NewGoodsApiClient(client.Conn)
+	goodsResponse, _ := goodsApiClient.Find(context.Background(), &api.GoodsRequest{})
+	ctx.JSON(http.StatusOK, goodsResponse)
 }

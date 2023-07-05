@@ -8,4 +8,5 @@ import (
 func Router(engine *crpc.Engine) {
 	group := engine.CreateGroup("order")
 	group.Get("/find", order.Find)
+	group.Get("/findGrpc", order.FindGrpc)
 }
