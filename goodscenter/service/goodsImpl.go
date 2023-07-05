@@ -3,6 +3,7 @@ package service
 import (
 	context "context"
 	"github/CeerDecy/RpcFrameWork/goodscenter/api"
+	"github/CeerDecy/RpcFrameWork/goodscenter/model"
 )
 
 type GoodsService struct {
@@ -25,4 +26,12 @@ func (g *GoodsService) Find(ctx context.Context, request *api.GoodsRequest) (*ap
 func (g *GoodsService) mustEmbedUnimplementedGoodsApiServer() {
 	//TODO implement me
 	panic("implement me")
+}
+
+type GoodsRpcService struct {
+}
+
+func (s *GoodsRpcService) Find(id int64) *model.Response {
+	goods := model.Goods{Id: id, Name: "RpcGoodsName"}
+	return model.SuccessResponse(goods)
 }
