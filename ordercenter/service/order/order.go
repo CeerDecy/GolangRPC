@@ -45,7 +45,7 @@ func FindGrpc(ctx *crpc.Context) {
 }
 
 func FindTcp(ctx *crpc.Context) {
-	proxy := rpc.NewTcpClientProxy(rpc.DefaultTcpClientOption)
+	proxy := rpc.NewTcpClientProxy(rpc.DefaultTcpClientOption.Protobuf())
 	result, err := proxy.Call(context.Background(), "goods", "Find", []any{int64(1001)})
 	if err != nil {
 		ctx.Logger.Error("FindGrpc", err.Error())
