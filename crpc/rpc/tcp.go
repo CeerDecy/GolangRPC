@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"reflect"
+	"sync/atomic"
 	"time"
 )
 
@@ -215,14 +216,14 @@ type TcpConn struct {
 
 // Send 发送响应体中数据
 func (c *TcpConn) Send(rsp *CrRpcResponse) error {
-	if rsp.Code == 200 {
+	if rsp.Code != 200 {
 
 	}
 	headers := make([]byte, 17)
 	//magic number
 	headers[0] = MagicNumber
 	//version
-	headers[17] = Version
+	headers[1] = Version
 	//full length
 	//消息类型
 	headers[6] = byte(msgResponse)
@@ -232,6 +233,7 @@ func (c *TcpConn) Send(rsp *CrRpcResponse) error {
 	// 编码 先序列化 再压缩
 	serializer := loadSerializer(rsp.SerializerType)
 	body, err := serializer.Serialize(rsp.Data)
+	fmt.Println(rsp.Data)
 	if err != nil {
 		return err
 	}
@@ -240,11 +242,14 @@ func (c *TcpConn) Send(rsp *CrRpcResponse) error {
 	if err != nil {
 		return err
 	}
+	binary.BigEndian.PutUint32(headers[2:6], uint32(len(headers)+len(body)))
+	fmt.Println(headers)
 	_, err = c.conn.Write(headers[:])
+	fmt.Println(headers)
 	if err != nil {
 		return err
 	}
-	_, err = c.conn.Write(body)
+	_, err = c.conn.Write(body[:])
 	return err
 }
 
@@ -270,14 +275,16 @@ func (t *TcpRpcServer) Stop() error {
 
 // 读取请求
 func (t *TcpRpcServer) readHandle(conn *TcpConn) error {
-	// 接收数据
-	msg, err := t.decodeFrame(conn)
-	if err != nil {
-		rsp := &CrRpcResponse{
-			Code: 500,
-			Msg:  err.Error(),
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("TcpRpcServer", err)
+			_ = conn.conn.Close()
 		}
-		conn.rpcChan <- rsp
+	}()
+	// 接收数据
+	msg, err := decodeFrame(conn.conn)
+	if err != nil {
+		log.Println("server readHandle", err)
 		return err
 	}
 	if msg.Header.MessageType == msgRequest {
@@ -333,25 +340,20 @@ func (t *TcpRpcServer) writeHandle(conn *TcpConn) {
 		defer conn.conn.Close()
 		//发送数据
 		err := conn.Send(rsp)
-		log.Println(err)
+		log.Println("writeHandle", err)
 	}
 }
 
-func (t *TcpRpcServer) decodeFrame(conn *TcpConn) (*CrRpcMessage, error) {
+func decodeFrame(conn net.Conn) (*CrRpcMessage, error) {
 	headers := make([]byte, 17)
-	_, err := io.ReadFull(conn.conn, headers)
+	_, err := io.ReadFull(conn, headers)
 	if err != nil {
 		return nil, err
 	}
 	if headers[0] != MagicNumber {
-		rsp := &CrRpcResponse{
-			Code: 500,
-			Msg:  errors.New("magic number error").Error(),
-		}
-		conn.rpcChan <- rsp
-		return nil, errors.New("magic number error")
+		return nil, errors.New(fmt.Sprintf("magic number error %v %v", headers, MagicNumber))
 	}
-
+	fmt.Println(headers)
 	fullLength := int32(binary.BigEndian.Uint32(headers[2:6]))
 	msg := &CrRpcMessage{
 		Header: &Header{
@@ -365,30 +367,22 @@ func (t *TcpRpcServer) decodeFrame(conn *TcpConn) (*CrRpcMessage, error) {
 		},
 	}
 	bodyLen := fullLength - 17
+	fmt.Println(bodyLen)
+	//body := make([]byte, 1024)
 	body := make([]byte, bodyLen)
-	_, err = io.ReadFull(conn.conn, body)
+	_, err = io.ReadFull(conn, body)
 	if err != nil {
-		rsp := &CrRpcResponse{
-			Code: 500,
-			Msg:  err.Error(),
-		}
-		conn.rpcChan <- rsp
 		return nil, err
 	}
 	// 编码 ： 先序列化 后压缩
 	// 解码 ： 先解压 后反序列化
 	compress := loadCompress(msg.Header.CompressType)
-	body, err = compress.Compress(body)
+	body, err = compress.UnCompress(body)
 	serializer := loadSerializer(msg.Header.SerializeType)
 	if msg.Header.MessageType == msgRequest {
 		req := &CrRpcRequest{}
 		err = serializer.Deserialize(body, req)
 		if err != nil {
-			rsp := &CrRpcResponse{
-				Code: 500,
-				Msg:  err.Error(),
-			}
-			conn.rpcChan <- rsp
 			return nil, err
 		}
 		msg.Data = req
@@ -398,11 +392,6 @@ func (t *TcpRpcServer) decodeFrame(conn *TcpConn) (*CrRpcMessage, error) {
 		rsp := &CrRpcResponse{}
 		err = serializer.Deserialize(body, rsp)
 		if err != nil {
-			rsp := &CrRpcResponse{
-				Code: 500,
-				Msg:  err.Error(),
-			}
-			conn.rpcChan <- rsp
 			return nil, err
 		}
 		msg.Data = rsp
@@ -435,7 +424,7 @@ func loadCompress(compressType CompressType) Compressor {
 
 type CrRpcClient interface {
 	Connect() error
-	Invoke(ctx context.Context, serviceName, method string, args map[string]any) (any, error)
+	Invoke(ctx context.Context, serviceName, method string, args []any) (any, error)
 	Close() error
 }
 
@@ -448,7 +437,7 @@ type TcpClientOption struct {
 	Port              int
 }
 
-var DefaultTcpClientOption = &TcpClientOption{
+var DefaultTcpClientOption = TcpClientOption{
 	Host:              "127.0.0.1",
 	Port:              9000,
 	Retries:           3,
@@ -466,7 +455,7 @@ func NewTcpClient(option TcpClientOption) *TcpClient {
 	return &TcpClient{option: option}
 }
 
-// Connect 获取🔗
+// Connect 获取链接
 func (t *TcpClient) Connect() error {
 	addr := fmt.Sprintf("%s:%d", t.option.Host, t.option.Port)
 	conn, err := net.DialTimeout("tcp", addr, t.option.ConnectionTimeout)
@@ -477,12 +466,113 @@ func (t *TcpClient) Connect() error {
 	return nil
 }
 
-func (t *TcpClient) Invoke(ctx context.Context, serviceName, method string, args map[string]any) (any, error) {
-	//TODO implement me
-	panic("implement me")
+var reqId int64
+
+// Invoke 调用RPC
+func (t *TcpClient) Invoke(ctx context.Context, serviceName, method string, args []any) (any, error) {
+	// 设置请求体
+	req := &CrRpcRequest{}
+	req.RequestId = atomic.AddInt64(&reqId, 1)
+	req.ServiceName = serviceName
+	req.MethodName = method
+	req.Args = args
+	// 设置请求头
+	header := make([]byte, 17)
+	header[0] = MagicNumber
+	header[1] = Version
+	header[6] = byte(msgRequest)
+	header[7] = byte(t.option.CompressType)
+	header[8] = byte(t.option.SerializerType)
+	binary.BigEndian.PutUint64(header[9:], uint64(req.RequestId))
+	//
+	serializer := loadSerializer(t.option.SerializerType)
+	body, err := serializer.Serialize(req)
+	if err != nil {
+		return nil, err
+	}
+	compressor := loadCompress(t.option.CompressType)
+	body, err = compressor.Compress(body)
+	if err != nil {
+		return nil, err
+	}
+	fullLength := 17 + len(body)
+	binary.BigEndian.PutUint32(header[2:6], uint32(fullLength))
+
+	_, err = t.conn.Write(header[:])
+	if err != nil {
+		return nil, err
+	}
+	_, err = t.conn.Write(body[:])
+	if err != nil {
+		return nil, err
+	}
+	rspChan := make(chan *CrRpcResponse)
+	go t.readHandle(rspChan)
+	rsp := <-rspChan
+	return rsp, nil
 }
 
+// 等待响应并通过通道返回数据
+func (t *TcpClient) readHandle(rspChan chan *CrRpcResponse) {
+	//defer func() {
+	//	if err := recover(); err != nil {
+	//		log.Println("client readHandle", err)
+	//		rspChan <- errorResponse(errors.New(fmt.Sprintf("%v", err)))
+	//		_ = t.conn.Close()
+	//	}
+	//}()
+	for {
+		msg, err := decodeFrame(t.conn)
+		fmt.Println(msg, err)
+		if err != nil {
+			log.Println("no data been decode", err)
+			rspChan <- errorResponse(err)
+			return
+		}
+		if msg.Header.MessageType == msgResponse {
+			response := msg.Data.(*CrRpcResponse)
+			rspChan <- response
+			return
+		}
+	}
+}
+
+// Close 关闭连接
 func (t *TcpClient) Close() error {
-	//TODO implement me
-	panic("implement me")
+	if t.conn != nil {
+		return t.conn.Close()
+	}
+	return nil
+}
+
+type TcpClientProxy struct {
+	client *TcpClient
+	option TcpClientOption
+}
+
+func NewTcpClientProxy(option TcpClientOption) *TcpClientProxy {
+	return &TcpClientProxy{option: option}
+}
+
+func (c *TcpClientProxy) Call(ctx context.Context, serviceName, method string, args []any) (any, error) {
+	client := NewTcpClient(c.option)
+	c.client = client
+	err := client.Connect()
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < c.option.Retries; i++ {
+		result, err := client.Invoke(ctx, serviceName, method, args)
+		if err != nil {
+			if i >= c.option.Retries-1 {
+				log.Println("already retry all time")
+				_ = client.Close()
+				return nil, err
+			}
+			continue
+		}
+		_ = client.Close()
+		return result, nil
+	}
+	return nil, errors.New("retry time")
 }

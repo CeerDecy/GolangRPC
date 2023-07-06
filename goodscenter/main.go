@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/gob"
 	"github/CeerDecy/RpcFrameWork/crpc"
 	"github/CeerDecy/RpcFrameWork/crpc/rpc"
+	"github/CeerDecy/RpcFrameWork/goodscenter/model"
 	"github/CeerDecy/RpcFrameWork/goodscenter/router"
 	"github/CeerDecy/RpcFrameWork/goodscenter/service"
 )
@@ -32,6 +34,8 @@ func main() {
 	//	engine.Logger.Error("Main", err.Error())
 	//}
 	server := rpc.NewTcpRpcServer(":9000")
+	gob.Register(&model.Response{})
+	gob.Register(&model.Goods{})
 	server.Register("goods", &service.GoodsRpcService{})
 	server.Run()
 	engine.Run(":8001")

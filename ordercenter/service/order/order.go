@@ -35,10 +35,21 @@ func FindGrpc(ctx *crpc.Context) {
 	client, err := rpc.NewGrpcClient(rpc.DefaultGrpcClientConfig("127.0.0.1:9000"))
 	if err != nil {
 		ctx.Logger.Error("FindGrpc", err.Error())
+		ctx.JSON(http.StatusOK, model.SuccessResponse(err.Error()))
 	}
 	defer client.Conn.Close()
 	client.Conn.Connect()
 	goodsApiClient := api.NewGoodsApiClient(client.Conn)
 	goodsResponse, _ := goodsApiClient.Find(context.Background(), &api.GoodsRequest{})
 	ctx.JSON(http.StatusOK, goodsResponse)
+}
+
+func FindTcp(ctx *crpc.Context) {
+	proxy := rpc.NewTcpClientProxy(rpc.DefaultTcpClientOption)
+	result, err := proxy.Call(context.Background(), "goods", "Find", []any{int64(1001)})
+	if err != nil {
+		ctx.Logger.Error("FindGrpc", err.Error())
+		ctx.JSON(http.StatusOK, model.SuccessResponse(err.Error()))
+	}
+	ctx.JSON(http.StatusOK, result)
 }
