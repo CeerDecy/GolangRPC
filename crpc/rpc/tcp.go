@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github/CeerDecy/RpcFrameWork/crpc/register"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"io"
@@ -185,17 +186,21 @@ type CrRpcServer interface {
 }
 
 type TcpRpcServer struct {
+	host       string
+	port       uint64
 	listen     net.Listener
 	serviceMap map[string]any
 }
 
 // NewTcpRpcServer TcpRpcServer构造器
-func NewTcpRpcServer(addr string) *TcpRpcServer {
-	listen, err := net.Listen("tcp", addr)
+func NewTcpRpcServer(addr string, port uint64) *TcpRpcServer {
+	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
 	if err != nil {
 		panic(err)
 	}
 	return &TcpRpcServer{
+		host:       addr,
+		port:       port,
 		listen:     listen,
 		serviceMap: make(map[string]any),
 	}
@@ -208,6 +213,14 @@ func (t *TcpRpcServer) Register(name string, service any) {
 		panic(errors.New("this service is not a pointer"))
 	}
 	t.serviceMap[name] = service
+	client, err := register.CreateNacosClient()
+	if err != nil {
+		panic(err)
+	}
+	err = register.RegisService(client, name, t.host, t.port)
+	if err != nil {
+		panic(err)
+	}
 }
 
 type TcpConn struct {
@@ -243,7 +256,6 @@ func (c *TcpConn) Send(rsp *CrRpcResponse) error {
 		pRsp.Msg = rsp.Msg
 		pRsp.RequestId = rsp.RequestId
 		m := make(map[string]any)
-		fmt.Printf("%+v", rsp)
 		data, _ := json.Marshal(rsp.Data)
 		_ = json.Unmarshal(data, &m)
 		value, err := structpb.NewStruct(m)
@@ -251,17 +263,14 @@ func (c *TcpConn) Send(rsp *CrRpcResponse) error {
 			return err
 		}
 		pRsp.Data = structpb.NewStructValue(value)
-		fmt.Printf("%+v\n", pRsp)
 		body, err = serializer.Serialize(pRsp)
 		_ = serializer.Deserialize(body, pRsp)
-		fmt.Printf("%+v\n", pRsp)
 	} else {
 		body, err = serializer.Serialize(rsp)
 	}
 	if err != nil {
 		return err
 	}
-	fmt.Println(body)
 	compress := loadCompress(rsp.CompressType)
 	body, err = compress.Compress(body)
 	if err != nil {
@@ -318,7 +327,6 @@ func (t *TcpRpcServer) readHandle(conn *TcpConn) error {
 				CompressType:   msg.Header.CompressType,
 				SerializerType: msg.Header.SerializeType,
 			}
-			fmt.Printf("%+v\n", rsp)
 			serviceName := request.ServiceName
 			methodName := request.MethodName
 			service, ok := t.serviceMap[serviceName]
@@ -396,7 +404,6 @@ func (t *TcpRpcServer) readHandle(conn *TcpConn) error {
 			rsp.Code = 200
 			rsp.Msg = "success"
 			rsp.Data = results[0]
-			fmt.Printf("Server ReadHandle %+v", rsp)
 			conn.rpcChan <- rsp
 		}
 	}
@@ -408,7 +415,6 @@ func (t *TcpRpcServer) writeHandle(conn *TcpConn) {
 	select {
 	case rsp := <-conn.rpcChan:
 		defer conn.conn.Close()
-		fmt.Printf("%+v\n", rsp)
 		//发送数据
 		err := conn.Send(rsp)
 		log.Println("writeHandle", err)
@@ -424,7 +430,6 @@ func decodeFrame(conn net.Conn) (*CrRpcMessage, error) {
 	if headers[0] != MagicNumber {
 		return nil, errors.New(fmt.Sprintf("magic number error %v %v", headers, MagicNumber))
 	}
-	fmt.Println(headers)
 	fullLength := int32(binary.BigEndian.Uint32(headers[2:6]))
 	msg := &CrRpcMessage{
 		Header: &Header{
@@ -438,7 +443,6 @@ func decodeFrame(conn net.Conn) (*CrRpcMessage, error) {
 		},
 	}
 	bodyLen := fullLength - 17
-	fmt.Println(bodyLen)
 	//body := make([]byte, 1024)
 	body := make([]byte, bodyLen)
 	_, err = io.ReadFull(conn, body)
@@ -448,13 +452,11 @@ func decodeFrame(conn net.Conn) (*CrRpcMessage, error) {
 	// 编码 ： 先序列化 后压缩
 	// 解码 ： 先解压 后反序列化
 	compress := loadCompress(msg.Header.CompressType)
-	fmt.Println("Get", body)
 	body, err = compress.UnCompress(body)
 	serializer := loadSerializer(msg.Header.SerializeType)
 	if msg.Header.MessageType == msgRequest {
 		if msg.Header.SerializeType == PROTOBUF {
 			pReq := &Request{}
-			fmt.Println(body)
 			err = serializer.Deserialize(body, pReq)
 			if err != nil {
 				return nil, err
@@ -472,7 +474,6 @@ func decodeFrame(conn net.Conn) (*CrRpcMessage, error) {
 	}
 	if msg.Header.MessageType == msgResponse {
 		if msg.Header.SerializeType == PROTOBUF {
-			fmt.Println(body)
 			rsp := &Response{}
 			if err = serializer.Deserialize(body, rsp); err != nil {
 				return nil, err
@@ -543,8 +544,9 @@ func (c *TcpClientOption) Protobuf() TcpClientOption {
 }
 
 type TcpClient struct {
-	conn   net.Conn
-	option TcpClientOption
+	conn        net.Conn
+	option      TcpClientOption
+	ServiceName string
 }
 
 func NewTcpClient(option TcpClientOption) *TcpClient {
@@ -553,6 +555,17 @@ func NewTcpClient(option TcpClientOption) *TcpClient {
 
 // Connect 获取链接
 func (t *TcpClient) Connect() error {
+	// 从注册中心获取ip和端口
+	client, err := register.CreateNacosClient()
+	if err != nil {
+		return err
+	}
+	host, port, err := register.GetInstance(client, t.ServiceName)
+	if err != nil {
+		return err
+	}
+	t.option.Host = host
+	t.option.Port = int(port)
 	addr := fmt.Sprintf("%s:%d", t.option.Host, t.option.Port)
 	conn, err := net.DialTimeout("tcp", addr, t.option.ConnectionTimeout)
 	if err != nil {
@@ -596,7 +609,6 @@ func (t *TcpClient) Invoke(ctx context.Context, serviceName, method string, args
 			Args:        list.Values,
 		}
 		body, err = serializer.Serialize(pReq)
-		fmt.Println(body)
 		err = serializer.Deserialize(body, pReq)
 		log.Println(err)
 	} else {
@@ -645,7 +657,7 @@ func (t *TcpClient) readHandle(rspChan chan *CrRpcResponse) {
 		}
 		if msg.Header.MessageType == msgResponse {
 			if msg.Header.SerializeType == PROTOBUF {
-				fmt.Printf("%+v\n", msg.Data)
+				//fmt.Printf("%+v\n", msg.Data)
 				rsp := msg.Data.(*Response)
 				asInterface := rsp.Data.AsInterface()
 				marshal, err := json.Marshal(asInterface)
@@ -683,6 +695,7 @@ func NewTcpClientProxy(option TcpClientOption) *TcpClientProxy {
 
 func (c *TcpClientProxy) Call(ctx context.Context, serviceName, method string, args []any) (any, error) {
 	client := NewTcpClient(c.option)
+	client.ServiceName = serviceName
 	c.client = client
 	err := client.Connect()
 	if err != nil {

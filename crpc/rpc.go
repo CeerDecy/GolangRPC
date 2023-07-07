@@ -2,13 +2,18 @@ package crpc
 
 import (
 	"fmt"
+	"github.com/nacos-group/nacos-sdk-go/v2/clients/naming_client"
 	"github/CeerDecy/RpcFrameWork/crpc/config"
 	"github/CeerDecy/RpcFrameWork/crpc/crpcLogger"
+	"github/CeerDecy/RpcFrameWork/crpc/gateway"
+	"github/CeerDecy/RpcFrameWork/crpc/register"
 	"github/CeerDecy/RpcFrameWork/crpc/render"
 	"github/CeerDecy/RpcFrameWork/crpc/utils"
 	"html/template"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"sync"
 )
 
@@ -141,18 +146,28 @@ type ErrorHandler func(err error) (int, any)
 
 type Engine struct {
 	router
-	funcMap      template.FuncMap
-	HTMLRender   *render.HTMLRender
-	Pool         sync.Pool
-	Logger       *crpcLogger.Logger
-	middles      []MiddleWareFunc
-	errorHandler ErrorHandler
+	funcMap          template.FuncMap
+	HTMLRender       *render.HTMLRender
+	Pool             sync.Pool
+	Logger           *crpcLogger.Logger
+	middles          []MiddleWareFunc
+	errorHandler     ErrorHandler
+	OpenGateway      bool
+	gatewayConfigs   []*gateway.GWConfig
+	gatewayTreeNode  *gateway.TreeNode
+	gatewayConfigMap map[string]*gateway.GWConfig
+	RegClient        naming_client.INamingClient
 }
 
 // MakeEngine 初始化引擎
 func MakeEngine() *Engine {
 	e := &Engine{
 		router: router{},
+		gatewayTreeNode: &gateway.TreeNode{
+			Name:  "/",
+			Child: make([]*gateway.TreeNode, 0),
+		},
+		gatewayConfigMap: make(map[string]*gateway.GWConfig),
 	}
 	e.Pool.New = func() any {
 		return e.allocateContext()
@@ -173,6 +188,15 @@ func DefaultEngine() *Engine {
 	}
 	engine.router.engine = engine
 	return engine
+}
+
+// SetGatewayConfig 设置gateway配置
+func (e *Engine) SetGatewayConfig(conf []*gateway.GWConfig) {
+	e.gatewayConfigs = append(e.gatewayConfigs, conf...)
+	for index, v := range e.gatewayConfigs {
+		e.gatewayTreeNode.Put(v.Path, v.Name)
+		e.gatewayConfigMap[v.Name] = e.gatewayConfigs[index]
+	}
 }
 
 // 给Context分配内存
@@ -210,14 +234,69 @@ func (e *Engine) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 // Run 启动引擎
 func (e *Engine) Run(address string) {
+	client, err := register.CreateNacosClient()
+	if err != nil {
+		e.Logger.Debug("run register", err)
+	}
+	e.RegClient = client
 	http.Handle("/", e)
-	err := http.ListenAndServe(address, nil)
+	err = http.ListenAndServe(address, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func (e *Engine) HttpRequestHandle(ctx *Context, writer http.ResponseWriter, request *http.Request) {
+	if e.OpenGateway {
+		// 网关处理逻辑
+		path := request.URL.Path
+		node := e.gatewayTreeNode.Get(path)
+		if node == nil {
+			writer.WriteHeader(http.StatusNotFound)
+			ctx.Logger.Error("Gateway", "404 not found")
+			return
+		}
+		fmt.Println(node.Name)
+		gwConfig := e.gatewayConfigMap[node.GwName]
+		instance, port, err := register.GetInstance(e.RegClient, gwConfig.ServiceName)
+		if err != nil {
+			writer.WriteHeader(http.StatusInternalServerError)
+			ctx.Logger.Error("Gateway", err.Error())
+			return
+		}
+		fmt.Println(fmt.Sprintf("http://%s:%d%s", instance, port, path))
+		target, err := url.Parse(fmt.Sprintf("http://%s:%d%s", instance, port, path))
+		if err != nil {
+			writer.WriteHeader(http.StatusInternalServerError)
+			ctx.Logger.Error("Gateway", err.Error())
+			return
+		}
+		// 重定向请求
+		director := func(request *http.Request) {
+			request.Host = target.Host
+			request.URL.Host = target.Host
+			request.URL.Path = target.Path
+			request.URL.Scheme = target.Scheme
+			if _, ok := request.Header["User-Agent"]; !ok {
+				request.Header.Set("User-Agent", "")
+			}
+			if gwConfig.Header != nil {
+				gwConfig.Header(request)
+			}
+			fmt.Println("请求")
+		}
+		response := func(response *http.Response) error {
+			fmt.Println("响应修改")
+			return nil
+		}
+		handler := func(writer http.ResponseWriter, request *http.Request, err error) {
+			e.Logger.Error("Gateway Error", err.Error())
+			fmt.Println("错误处理")
+		}
+		proxy := httputil.ReverseProxy{Director: director, ModifyResponse: response, ErrorHandler: handler}
+		proxy.ServeHTTP(writer, request)
+		return
+	}
 	// 获取当前请求的方法
 	method := request.Method
 	// 遍历Group

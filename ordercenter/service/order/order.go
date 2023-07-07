@@ -3,6 +3,7 @@ package order
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
 	"github/CeerDecy/RpcFrameWork/crpc/rpc"
 	"github/CeerDecy/RpcFrameWork/ordercenter/api"
@@ -45,6 +46,7 @@ func FindGrpc(ctx *crpc.Context) {
 }
 
 func FindTcp(ctx *crpc.Context) {
+	fmt.Println(ctx.GetHeader("Hello"))
 	proxy := rpc.NewTcpClientProxy(rpc.DefaultTcpClientOption.Protobuf())
 	result, err := proxy.Call(context.Background(), "goods", "Find", []any{int64(1001)})
 	if err != nil {
@@ -52,4 +54,17 @@ func FindTcp(ctx *crpc.Context) {
 		ctx.JSON(http.StatusOK, model.SuccessResponse(err.Error()))
 	}
 	ctx.JSON(http.StatusOK, result)
+}
+
+type RpcServiceOrder struct {
+}
+
+func (r *RpcServiceOrder) FindRpc(ctx *crpc.Context) {
+	//proxy := rpc.NewTcpClientProxy(rpc.DefaultTcpClientOption.Protobuf())
+	//result, err := proxy.Call(context.Background(), "goods", "Find", []any{int64(1001)})
+	//if err != nil {
+	//	ctx.Logger.Error("FindGrpc", err.Error())
+	//	ctx.JSON(http.StatusOK, model.SuccessResponse(err.Error()))
+	//}
+	ctx.JSON(http.StatusOK, "result")
 }

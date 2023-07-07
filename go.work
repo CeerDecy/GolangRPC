@@ -2,7 +2,9 @@ go 1.19
 
 use (
 	./crpc
+	./gatewayserver
 	./goodscenter
 	./ordercenter
 	./server
+	goodscenter2
 )
