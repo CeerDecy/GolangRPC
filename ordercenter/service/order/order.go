@@ -3,8 +3,10 @@ package order
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc"
+	"github/CeerDecy/RpcFrameWork/crpc/breaker"
 	"github/CeerDecy/RpcFrameWork/crpc/rpc"
 	"github/CeerDecy/RpcFrameWork/ordercenter/api"
 	"github/CeerDecy/RpcFrameWork/ordercenter/model"
@@ -45,13 +47,28 @@ func FindGrpc(ctx *crpc.Context) {
 	ctx.JSON(http.StatusOK, goodsResponse)
 }
 
+var settings = breaker.Settings{
+	FallBack: func(err error) (any, error) {
+		return "降级处理", nil
+	},
+}
+
+var circuitBreaker = breaker.NewCircuitBreaker(settings)
+
 func FindTcp(ctx *crpc.Context) {
-	fmt.Println(ctx.GetHeader("Hello"))
-	proxy := rpc.NewTcpClientProxy(rpc.DefaultTcpClientOption.Protobuf())
-	result, err := proxy.Call(context.Background(), "goods", "Find", []any{int64(1001)})
+	result, err := circuitBreaker.Execute(func() (any, error) {
+		if ctx.GetQuery("id") == "2" {
+			return nil, errors.New("测试熔断")
+		}
+		fmt.Println(ctx.GetHeader("Hello"))
+		proxy := rpc.NewTcpClientProxy(rpc.DefaultTcpClientOption.Protobuf())
+		result, err := proxy.Call(context.Background(), "goods", "Find", []any{int64(1001)})
+		return result, err
+	})
 	if err != nil {
 		ctx.Logger.Error("FindGrpc", err.Error())
 		ctx.JSON(http.StatusOK, model.SuccessResponse(err.Error()))
+		return
 	}
 	ctx.JSON(http.StatusOK, result)
 }

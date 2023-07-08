@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github/CeerDecy/RpcFrameWork/crpc/register"
+	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"io"
@@ -186,10 +187,12 @@ type CrRpcServer interface {
 }
 
 type TcpRpcServer struct {
-	host       string
-	port       uint64
-	listen     net.Listener
-	serviceMap map[string]any
+	host           string
+	port           uint64
+	listen         net.Listener
+	serviceMap     map[string]any
+	Limiter        *rate.Limiter
+	LimiterTimeout time.Duration
 }
 
 // NewTcpRpcServer TcpRpcServer构造器
@@ -204,6 +207,10 @@ func NewTcpRpcServer(addr string, port uint64) *TcpRpcServer {
 		listen:     listen,
 		serviceMap: make(map[string]any),
 	}
+}
+
+func (t *TcpRpcServer) SetLimiter(limit, cap int) {
+	t.Limiter = rate.NewLimiter(rate.Limit(limit), cap)
 }
 
 // Register 注册服务
@@ -313,9 +320,24 @@ func (t *TcpRpcServer) readHandle(conn *TcpConn) error {
 			_ = conn.conn.Close()
 		}
 	}()
+	// 添加限流
+	timeout, cancelFunc := context.WithTimeout(context.Background(), t.LimiterTimeout)
+	defer cancelFunc()
+	err := t.Limiter.Wait(timeout)
+	if err != nil {
+		rsp := &CrRpcResponse{}
+		rsp.Code = 500
+		rsp.Msg = err.Error()
+		conn.rpcChan <- rsp
+		return err
+	}
 	// 接收数据
 	msg, err := decodeFrame(conn.conn)
 	if err != nil {
+		rsp := &CrRpcResponse{}
+		rsp.Code = 500
+		rsp.Msg = err.Error()
+		conn.rpcChan <- rsp
 		log.Println("server readHandle", err)
 		return err
 	}

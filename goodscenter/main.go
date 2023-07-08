@@ -7,6 +7,7 @@ import (
 	"github/CeerDecy/RpcFrameWork/goodscenter/model"
 	"github/CeerDecy/RpcFrameWork/goodscenter/router"
 	"github/CeerDecy/RpcFrameWork/goodscenter/service"
+	"time"
 )
 
 func main() {
@@ -37,6 +38,8 @@ func main() {
 	gob.Register(&model.Response{})
 	gob.Register(&model.Goods{})
 	server.Register("goods", &service.GoodsRpcService{})
+	server.SetLimiter(1, 1)
+	server.LimiterTimeout = time.Second
 	server.Run()
 	engine.Run(":8001")
 }
